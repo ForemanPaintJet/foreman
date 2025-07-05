@@ -28,7 +28,7 @@ struct WebRTCSocketFeature {
         var loadingItems: Set<LoadingItem> = []
         var connectionStatus: ConnectionStatus = .disconnected
         var serverURL: String = "ws://localhost:8765"
-        var roomId: String = ""
+        var roomId: String = "test-room"
         var userId: String = ""
         var connectedUsers: [String] = []
         var lastError: String?
@@ -65,6 +65,9 @@ struct WebRTCSocketFeature {
                 to: String, candidate: String, sdpMLineIndex: Int, sdpMid: String?)
             case clearMessages
             case clearError
+
+            // WebRTC Actions
+            case createOfferForUser(String)
         }
 
         @CasePathable
@@ -81,6 +84,13 @@ struct WebRTCSocketFeature {
             case socketDisconnected
             case roomJoined
             case roomLeft
+
+            // WebRTC Internal Actions
+            case webRTCOfferGenerated(WebRTCOffer)
+            case webRTCAnswerGenerated(WebRTCAnswer)
+            case webRTCIceCandidateGenerated(ICECandidate)
+            case peerConnectionCreated(String)
+            case peerConnectionRemoved(String)
         }
 
         enum DelegateAction: Equatable {
@@ -107,6 +117,7 @@ struct WebRTCSocketFeature {
     }
 
     @Dependency(\.socketClient) var socketClient
+    @Dependency(\.webRTCClient) var webRTCClient
 
     var body: some Reducer<State, Action> {
         Reduce { state, action in
@@ -155,6 +166,25 @@ struct WebRTCSocketFeature {
                         group.addTask {
                             for await roomInfo in await socketClient.roomUpdateStream() {
                                 await send(._internal(.roomUpdateReceived(roomInfo)))
+                            }
+                        }
+
+                        // WebRTC streams
+                        group.addTask {
+                            for await offer in await webRTCClient.offerStream() {
+                                await send(._internal(.webRTCOfferGenerated(offer)))
+                            }
+                        }
+
+                        group.addTask {
+                            for await answer in await webRTCClient.answerStream() {
+                                await send(._internal(.webRTCAnswerGenerated(answer)))
+                            }
+                        }
+
+                        group.addTask {
+                            for await candidate in await webRTCClient.iceCandidateStream() {
+                                await send(._internal(.webRTCIceCandidateGenerated(candidate)))
                             }
                         }
                     }
@@ -321,6 +351,26 @@ struct WebRTCSocketFeature {
                 state.lastError = nil
                 return .none
 
+            // WebRTC View Actions
+            case .view(.createOfferForUser(let userId)):
+                return .run { send in
+                    do {
+                        // Create peer connection if it doesn't exist
+                        let created = await webRTCClient.createPeerConnection(userId)
+                        if created {
+                            await send(._internal(.peerConnectionCreated(userId)))
+                        }
+
+                        // Create offer
+                        try await webRTCClient.createOffer(userId)
+                    } catch {
+                        await send(
+                            ._internal(
+                                .errorOccurred(
+                                    "Failed to create offer: \(error.localizedDescription)")))
+                    }
+                }
+
             case ._internal(.setLoading(let item, let isLoading)):
                 if isLoading {
                     state.loadingItems.insert(item)
@@ -334,6 +384,10 @@ struct WebRTCSocketFeature {
                 return .none
 
             case ._internal(.socketMessageReceived(let message)):
+                print("📨 TCA: Socket message received - type: \(message.type)")
+                if let data = message.data {
+                    print("📨 TCA: Message data keys: \(data.keys.sorted())")
+                }
                 state.messages.append(message)
                 // Keep only last 50 messages
                 if state.messages.count > 50 {
@@ -342,16 +396,57 @@ struct WebRTCSocketFeature {
                 return .none
 
             case ._internal(.offerReceived(let offer)):
+                print("🔥 TCA: Offer received from \(offer.from) to \(offer.to)")
+                print("🔥 TCA: Offer SDP length: \(offer.sdp.count)")
                 state.pendingOffers.append(offer)
-                return .send(.delegate(.didReceiveOffer(offer)))
+
+                // Handle the incoming offer with WebRTC
+                return .run { send in
+                    do {
+                        print("🔥 TCA: About to handle remote offer with WebRTC client")
+                        try await webRTCClient.handleRemoteOffer(offer)
+                        print("🔥 TCA: Successfully handled remote offer")
+                    } catch {
+                        print("🔥 TCA: Failed to handle remote offer: \(error)")
+                        await send(
+                            ._internal(
+                                .errorOccurred(
+                                    "Failed to handle remote offer: \(error.localizedDescription)"))
+                        )
+                    }
+                }
 
             case ._internal(.answerReceived(let answer)):
                 state.pendingAnswers.append(answer)
-                return .send(.delegate(.didReceiveAnswer(answer)))
+
+                // Handle the incoming answer with WebRTC
+                return .run { send in
+                    do {
+                        try await webRTCClient.handleRemoteAnswer(answer)
+                    } catch {
+                        await send(
+                            ._internal(
+                                .errorOccurred(
+                                    "Failed to handle remote answer: \(error.localizedDescription)")
+                            ))
+                    }
+                }
 
             case ._internal(.iceCandidateReceived(let candidate)):
                 state.pendingIceCandidates.append(candidate)
-                return .send(.delegate(.didReceiveIceCandidate(candidate)))
+
+                // Handle the incoming ICE candidate with WebRTC
+                return .run { send in
+                    do {
+                        try await webRTCClient.handleRemoteIceCandidate(candidate)
+                    } catch {
+                        await send(
+                            ._internal(
+                                .errorOccurred(
+                                    "Failed to handle remote ICE candidate: \(error.localizedDescription)"
+                                )))
+                    }
+                }
 
             case ._internal(.roomUpdateReceived(let roomInfo)):
                 state.connectedUsers = roomInfo.users
@@ -379,6 +474,58 @@ struct WebRTCSocketFeature {
             case ._internal(.roomLeft):
                 state.isJoinedToRoom = false
                 state.connectedUsers = []
+
+                // Remove all peer connections when leaving room
+                return .run { [connectedUsers = state.connectedUsers] send in
+                    for userId in connectedUsers {
+                        await webRTCClient.removePeerConnection(userId)
+                        await send(._internal(.peerConnectionRemoved(userId)))
+                    }
+                }
+
+            // WebRTC Internal Actions
+            case ._internal(.webRTCOfferGenerated(let offer)):
+                return .run { send in
+                    do {
+                        try await socketClient.sendOffer(offer)
+                    } catch {
+                        await send(
+                            ._internal(
+                                .errorOccurred(
+                                    "Failed to send offer: \(error.localizedDescription)")))
+                    }
+                }
+
+            case ._internal(.webRTCAnswerGenerated(let answer)):
+                return .run { send in
+                    do {
+                        try await socketClient.sendAnswer(answer)
+                    } catch {
+                        await send(
+                            ._internal(
+                                .errorOccurred(
+                                    "Failed to send answer: \(error.localizedDescription)")))
+                    }
+                }
+
+            case ._internal(.webRTCIceCandidateGenerated(let candidate)):
+                return .run { send in
+                    do {
+                        try await socketClient.sendIceCandidate(candidate)
+                    } catch {
+                        await send(
+                            ._internal(
+                                .errorOccurred(
+                                    "Failed to send ICE candidate: \(error.localizedDescription)")))
+                    }
+                }
+
+            case ._internal(.peerConnectionCreated(let userId)):
+                print("🤝 Peer connection created for \(userId)")
+                return .none
+
+            case ._internal(.peerConnectionRemoved(let userId)):
+                print("🗑️ Peer connection removed for \(userId)")
                 return .none
 
             case .alert(.presented(.confirmDisconnect)):

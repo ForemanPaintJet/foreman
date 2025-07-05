@@ -164,39 +164,60 @@ class SocketClient: ObservableObject {
 
     func sendOffer(_ offer: WebRTCOffer) async throws {
         print("📞 SocketClient: Sending WebRTC offer to '\(offer.to)'")
-        let data: [String: Any] = [
-            "room": currentRoom ?? "",
+
+        // Format to match server's expected structure: {"from_user": "...", "to_user": "...", "offer": {...}}
+        let offerData: [String: Any] = [
             "sdp": offer.sdp,
             "type": offer.type,
-            "to": offer.to,
         ]
+
+        let data: [String: Any] = [
+            "from_user": currentUserId ?? "",
+            "to_user": offer.to,
+            "offer": offerData,
+        ]
+
         try await send(event: "offer", data: data)
-        print("✅ SocketClient: Successfully sent offer")
+        print("✅ SocketClient: Successfully sent offer with nested format")
     }
 
     func sendAnswer(_ answer: WebRTCAnswer) async throws {
         print("📞 SocketClient: Sending WebRTC answer to '\(answer.to)'")
-        let data: [String: Any] = [
-            "room": currentRoom ?? "",
+
+        // Format to match server's expected structure: {"from_user": "...", "to_user": "...", "answer": {...}}
+        let answerData: [String: Any] = [
             "sdp": answer.sdp,
             "type": answer.type,
-            "to": answer.to,
         ]
+
+        let data: [String: Any] = [
+            "from_user": currentUserId ?? "",
+            "to_user": answer.to,
+            "answer": answerData,
+        ]
+
         try await send(event: "answer", data: data)
-        print("✅ SocketClient: Successfully sent answer")
+        print("✅ SocketClient: Successfully sent answer with nested format")
     }
 
     func sendICECandidate(_ candidate: ICECandidate) async throws {
         print("🧊 SocketClient: Sending ICE candidate to '\(candidate.to)'")
-        let data: [String: Any] = [
-            "room": currentRoom ?? "",
+
+        // Format to match server's expected structure: {"from_user": "...", "to_user": "...", "candidate": {...}}
+        let candidateData: [String: Any] = [
             "candidate": candidate.candidate,
             "sdpMLineIndex": candidate.sdpMLineIndex,
             "sdpMid": candidate.sdpMid ?? "",
-            "to": candidate.to,
         ]
+
+        let data: [String: Any] = [
+            "from_user": currentUserId ?? "",
+            "to_user": candidate.to,
+            "candidate": candidateData,
+        ]
+
         try await send(event: "ice_candidate", data: data)
-        print("✅ SocketClient: Successfully sent ICE candidate")
+        print("✅ SocketClient: Successfully sent ICE candidate with nested format")
     }
 
     private func listenForMessages() async {
@@ -235,16 +256,48 @@ class SocketClient: ObservableObject {
         }
 
         do {
-            if let messageObject = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                let event = messageObject["type"] as? String
-            {
-                print("📨 SocketClient: Parsed WebSocket message - event: '\(event)'")
+            if let messageObject = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                print("📨 SocketClient: Raw WebSocket message: \(messageObject)")
 
-                // Remove the "type" field and pass the rest as event data
+                // Try to detect message type from the structure
+                var event: String?
                 var eventData = messageObject
-                eventData.removeValue(forKey: "type")
 
-                await handleSocketEvent(event: event, data: eventData)
+                // Check if there's an explicit "type" field
+                if let explicitType = messageObject["type"] as? String {
+                    event = explicitType
+                    eventData.removeValue(forKey: "type")
+                }
+                // Detect offer messages
+                else if messageObject["offer"] != nil && messageObject["from_user"] != nil {
+                    event = "offer"
+                }
+                // Detect answer messages
+                else if messageObject["answer"] != nil && messageObject["from_user"] != nil {
+                    event = "answer"
+                }
+                // Detect ICE candidate messages
+                else if messageObject["candidate"] != nil && messageObject["from_user"] != nil {
+                    event = "ice_candidate"
+                }
+                // Detect room update messages
+                else if messageObject["room"] != nil
+                    && (messageObject["users"] != nil || messageObject["user_count"] != nil)
+                {
+                    event = "room_update"
+                }
+                // Detect room_joined messages
+                else if messageObject["room"] != nil && messageObject["users"] != nil {
+                    event = "room_joined"
+                }
+
+                guard let detectedEvent = event else {
+                    print("❌ SocketClient: Could not determine message type from: \(messageObject)")
+                    return
+                }
+
+                print("📨 SocketClient: Detected event type: '\(detectedEvent)'")
+                await handleSocketEvent(event: detectedEvent, data: eventData)
             } else {
                 print("❌ SocketClient: Invalid WebSocket message format: \(text)")
             }
@@ -254,7 +307,7 @@ class SocketClient: ObservableObject {
     }
 
     private func handleSocketEvent(event: String, data: [String: Any]) async {
-        print("📨 SocketClient: Received socket event '\(event)'")
+        print("📨 SocketClient: Received socket event '\(event)' with raw data: \(data)")
 
         let stringData = data.compactMapValues { value in
             if let string = value as? String {
@@ -271,7 +324,19 @@ class SocketClient: ObservableObject {
 
         switch event {
         case "offer":
-            if let sdp = data["sdp"] as? String,
+            // Handle server's offer format: {"from_user": "...", "offer": {"sdp": "...", "type": "offer"}}
+            if let fromUser = data["from_user"] as? String,
+                let offerData = data["offer"] as? [String: Any],
+                let sdp = offerData["sdp"] as? String,
+                let type = offerData["type"] as? String
+            {
+                print("📞 SocketClient: Received WebRTC offer from '\(fromUser)'")
+                let offer = WebRTCOffer(
+                    sdp: sdp, type: type, from: fromUser, to: currentUserId ?? "")
+                offerSubject.send(offer)
+            }
+            // Fallback to original format
+            else if let sdp = data["sdp"] as? String,
                 let type = data["type"] as? String,
                 let from = data["from"] as? String,
                 let to = data["to"] as? String
@@ -282,7 +347,19 @@ class SocketClient: ObservableObject {
             }
 
         case "answer":
-            if let sdp = data["sdp"] as? String,
+            // Handle server's answer format: {"from_user": "...", "answer": {"sdp": "...", "type": "answer"}}
+            if let fromUser = data["from_user"] as? String,
+                let answerData = data["answer"] as? [String: Any],
+                let sdp = answerData["sdp"] as? String,
+                let type = answerData["type"] as? String
+            {
+                print("📞 SocketClient: Received WebRTC answer from '\(fromUser)'")
+                let answer = WebRTCAnswer(
+                    sdp: sdp, type: type, from: fromUser, to: currentUserId ?? "")
+                answerSubject.send(answer)
+            }
+            // Fallback to original format
+            else if let sdp = data["sdp"] as? String,
                 let type = data["type"] as? String,
                 let from = data["from"] as? String,
                 let to = data["to"] as? String
@@ -293,7 +370,36 @@ class SocketClient: ObservableObject {
             }
 
         case "ice_candidate":
-            if let candidate = data["candidate"] as? String,
+            // Handle server's ICE candidate format: {"from_user": "...", "candidate": {...}}
+            if let fromUser = data["from_user"] as? String,
+                let candidateData = data["candidate"] as? [String: Any],
+                let candidate = candidateData["candidate"] as? String,
+                let sdpMLineIndex = candidateData["sdpMLineIndex"] as? Int
+            {
+                print("🧊 SocketClient: Received ICE candidate from '\(fromUser)'")
+
+                // Handle sdpMid as either string or integer
+                var sdpMid: String?
+                if let sdpMidString = candidateData["sdpMid"] as? String {
+                    sdpMid = sdpMidString
+                } else if let sdpMidInt = candidateData["sdpMid"] as? Int {
+                    sdpMid = String(sdpMidInt)
+                }
+
+                let iceCandidate = ICECandidate(
+                    candidate: candidate,
+                    sdpMLineIndex: sdpMLineIndex,
+                    sdpMid: sdpMid,
+                    from: fromUser,
+                    to: currentUserId ?? ""
+                )
+                iceCandidateSubject.send(iceCandidate)
+                print(
+                    "✅ SocketClient: Successfully parsed ICE candidate with sdpMid: \(sdpMid ?? "nil")"
+                )
+            }
+            // Fallback to original format
+            else if let candidate = data["candidate"] as? String,
                 let sdpMLineIndex = data["sdpMLineIndex"] as? Int,
                 let from = data["from"] as? String,
                 let to = data["to"] as? String
@@ -307,21 +413,44 @@ class SocketClient: ObservableObject {
                     to: to
                 )
                 iceCandidateSubject.send(iceCandidate)
+            } else {
+                print("❌ SocketClient: Invalid ICE candidate format: \(data)")
             }
 
-        case "room_update", "user_joined", "user_left":
-            if let roomId = data["room"] as? String,
-                let userCount = data["user_count"] as? Int,
-                let users = data["users"] as? [String]
-            {
-                print("🏠 SocketClient: Room update for '\(roomId)' - \(userCount) users: \(users)")
-                let roomInfo = RoomInfo(roomId: roomId, userCount: userCount, users: users)
-                connectedUsers = users
+        case "room_update", "user_joined", "user_left", "room_joined":
+            // Handle different formats from server
+            var roomId: String?
+            var userCount: Int = 0
+            var usersList: [String] = []
+
+            // Extract room ID
+            roomId = data["room"] as? String
+
+            // Extract user count - can be "users" or "user_count"
+            if let count = data["users"] as? Int {
+                userCount = count
+            } else if let count = data["user_count"] as? Int {
+                userCount = count
+            }
+
+            // Extract users list if available
+            if let users = data["users"] as? [String] {
+                usersList = users
+            }
+
+            if let roomId = roomId {
+                print(
+                    "🏠 SocketClient: Room event '\(event)' for '\(roomId)' - \(userCount) users: \(usersList)"
+                )
+                let roomInfo = RoomInfo(roomId: roomId, userCount: userCount, users: usersList)
+                connectedUsers = usersList
                 roomUpdateSubject.send(roomInfo)
+            } else {
+                print("❌ SocketClient: Invalid room event format: \(data)")
             }
 
         default:
-            print("❓ SocketClient: Unhandled socket event: '\(event)'")
+            print("❓ SocketClient: Unhandled socket event: '\(event)' with data: \(data)")
         }
     }
 }

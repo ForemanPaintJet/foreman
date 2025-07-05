@@ -249,37 +249,125 @@ struct WebRTCSocketView: View {
 
     private var webRTCControlsSection: some View {
         VStack(alignment: .leading, spacing: 16) {
-            SectionHeader(title: "WebRTC Controls", icon: "video")
+            SectionHeader(title: "Video Viewer", icon: "tv")
 
-            VStack(spacing: 12) {
-                InfoRow(
-                    title: "Pending Offers",
-                    value: "\(store.pendingOffers.count)",
-                    color: .blue
-                )
-
-                InfoRow(
-                    title: "Pending Answers",
-                    value: "\(store.pendingAnswers.count)",
-                    color: .green
-                )
-
-                InfoRow(
-                    title: "Pending ICE Candidates",
-                    value: "\(store.pendingIceCandidates.count)",
-                    color: .purple
-                )
-
-                if !store.pendingOffers.isEmpty || !store.pendingAnswers.isEmpty
-                    || !store.pendingIceCandidates.isEmpty
-                {
-                    Text(
-                        "This is a demo implementation. In a real app, you would integrate with WebRTC framework to handle these offers, answers, and ICE candidates."
+            if store.isJoinedToRoom {
+                // Video Viewer Interface (Receive-only)
+                VStack(spacing: 16) {
+                    // Info about receive-only mode
+                    HStack {
+                        Image(systemName: "eye")
+                            .foregroundColor(.blue)
+                        Text("Receive-Only Mode")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                        Spacer()
+                        Text("You can view others' video streams")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding()
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color.blue.opacity(0.1))
                     )
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .padding(.top, 8)
+
+                    // Connected Users with Call Buttons
+                    if !store.connectedUsers.isEmpty {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Available Streams")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+
+                            ForEach(store.connectedUsers.filter { $0 != store.userId }, id: \.self)
+                            { user in
+                                HStack {
+                                    Image(systemName: "person.circle")
+                                        .foregroundColor(.blue)
+
+                                    Text(user)
+                                        .font(.body)
+
+                                    Spacer()
+
+                                    Button("Watch") {
+                                        store.send(.view(.createOfferForUser(user)))
+                                    }
+                                    .buttonStyle(.borderedProminent)
+                                    .buttonBorderShape(.capsule)
+                                }
+                                .padding(.vertical, 4)
+                            }
+                        }
+                    }
+
+                    // WebRTC Status
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Connection Status")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+
+                        HStack {
+                            VStack(alignment: .leading) {
+                                InfoRow(
+                                    title: "Incoming Offers",
+                                    value: "\(store.pendingOffers.count)",
+                                    color: .blue
+                                )
+                                InfoRow(
+                                    title: "Responses Sent",
+                                    value: "\(store.pendingAnswers.count)",
+                                    color: .green
+                                )
+                            }
+
+                            Spacer()
+
+                            InfoRow(
+                                title: "ICE Candidates",
+                                value: "\(store.pendingIceCandidates.count)",
+                                color: .purple
+                            )
+                        }
+                    }
+
+                    // Video Viewer View
+                    NavigationLink(destination: VideoCallViewWrapper(store: store)) {
+                        HStack {
+                            Image(systemName: "tv.circle.fill")
+                                .font(.title2)
+                                .foregroundColor(.blue)
+
+                            Text("Open Video Viewer")
+                                .font(.headline)
+
+                            Spacer()
+
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding()
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(Color.blue.opacity(0.1))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(Color.blue.opacity(0.3), lineWidth: 1)
+                                )
+                        )
+                    }
+                    .buttonStyle(PlainButtonStyle())
                 }
+            } else {
+                Text("Join a room to start watching video streams")
+                    .font(.body)
+                    .foregroundColor(.secondary)
+                    .padding()
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color.gray.opacity(0.1))
+                    )
             }
         }
         .padding()
@@ -547,6 +635,74 @@ extension WebRTCSocketFeature.State {
 
     var canLeaveRoom: Bool {
         isJoinedToRoom && !loadingItems.contains(.leavingRoom)
+    }
+}
+
+#Preview {
+    WebRTCSocketView(
+        store: Store(
+            initialState: WebRTCSocketFeature.State(),
+            reducer: { WebRTCSocketFeature() }
+        )
+    )
+}
+
+// MARK: - Video Call View Wrapper
+
+struct VideoCallViewWrapper: View {
+    let store: StoreOf<WebRTCSocketFeature>
+
+    var body: some View {
+        VStack {
+            if store.isJoinedToRoom {
+                DirectVideoCallView()
+                    .navigationBarHidden(true)
+            } else {
+                VStack(spacing: 20) {
+                    ProgressView()
+                    Text("Connecting to video session...")
+                        .foregroundColor(.white)
+                    if !store.isJoinedToRoom {
+                        Text("Please join a room first")
+                            .foregroundColor(.orange)
+                    }
+
+                    Button("Back") {
+                        // Navigation will handle this
+                    }
+                    .padding()
+                    .background(Color.blue)
+                    .foregroundColor(.white)
+                    .cornerRadius(8)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.black.ignoresSafeArea())
+            }
+        }
+    }
+}
+
+// MARK: - Direct Video Call View
+
+struct DirectVideoCallView: View {
+    @Dependency(\.webRTCClient) var webRTCClientDependency
+
+    var body: some View {
+        VideoCallView(webRTCClient: WebRTCClientLive.shared.getClient())
+            .onAppear {
+                print("🎥 DirectVideoCallView: Video viewer started with WebRTC client")
+
+                // Debug: Print current video tracks
+                let client = WebRTCClientLive.shared.getClient()
+                print(
+                    "🎥 DirectVideoCallView: Current video tracks count: \(client.remoteVideoTracks.count)"
+                )
+                for (index, track) in client.remoteVideoTracks.enumerated() {
+                    print(
+                        "🎥 Track \(index): User \(track.userId), Enabled: \(track.track?.isEnabled ?? false)"
+                    )
+                }
+            }
     }
 }
 
