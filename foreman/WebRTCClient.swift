@@ -201,7 +201,9 @@ class WebRTCClient: NSObject, ObservableObject {
 
         print("📞 WebRTCClient: Handling remote offer from \(userId)")
         print("📞 WebRTCClient: Offer SDP length: \(offer.sdp.count)")
-        print("📞 WebRTCClient: Current peer connections before handling: \(peerConnections.keys.sorted())")
+        print(
+            "📞 WebRTCClient: Current peer connections before handling: \(peerConnections.keys.sorted())"
+        )
 
         if peerConnections[userId] == nil {
             print("📞 WebRTCClient: No existing peer connection for \(userId), creating new one")
@@ -219,7 +221,9 @@ class WebRTCClient: NSObject, ObservableObject {
             throw WebRTCError.peerConnectionNotFound
         }
 
-        print("📞 WebRTCClient: Peer connection found for \(userId), state: \(peerConnection.connectionState)")
+        print(
+            "📞 WebRTCClient: Peer connection found for \(userId), state: \(peerConnection.connectionState)"
+        )
 
         let remoteDescription = RTCSessionDescription(type: .offer, sdp: offer.sdp)
 
