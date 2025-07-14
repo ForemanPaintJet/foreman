@@ -191,7 +191,6 @@ struct RemoteVideoGrid: View {
 
     private let columns = [
         GridItem(.flexible()),
-        GridItem(.flexible()),
     ]
 
     var body: some View {

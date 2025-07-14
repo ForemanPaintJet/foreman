@@ -326,6 +326,12 @@ class WebRTCClient: NSObject, ObservableObject {
             "📺 WebRTCClient: Video track state - isEnabled: \(track.isEnabled), readyState: \(track.readyState)"
         )
 
+        // Check if we already have a video track for this user
+        if remoteVideoTracks.contains(where: { $0.userId == userId }) {
+            print("⚠️ WebRTCClient: Video track for \(userId) already exists, skipping duplicate")
+            return
+        }
+
         let videoTrackInfo = VideoTrackInfo(
             id: UUID().uuidString,
             userId: userId,
@@ -395,31 +401,12 @@ class PeerConnectionDelegate: NSObject, RTCPeerConnectionDelegate {
 
     func peerConnection(_ peerConnection: RTCPeerConnection, didAdd stream: RTCMediaStream) {
         print(
-            "📺 PeerConnection[\(userId)]: Stream added with \(stream.audioTracks.count) audio tracks and \(stream.videoTracks.count) video tracks"
+            "📺 PeerConnection[\(userId)]: Legacy stream added with \(stream.audioTracks.count) audio tracks and \(stream.videoTracks.count) video tracks"
         )
+        print("📺 PeerConnection[\(userId)]: Skipping legacy stream handling - using modern track-based approach")
 
-        // Log audio tracks
-        for (index, audioTrack) in stream.audioTracks.enumerated() {
-            print(
-                "🔊 Audio track \(index): enabled=\(audioTrack.isEnabled), state=\(audioTrack.readyState)"
-            )
-        }
-
-        // Log video tracks
-        for (index, videoTrack) in stream.videoTracks.enumerated() {
-            print(
-                "📺 Video track \(index): enabled=\(videoTrack.isEnabled), state=\(videoTrack.readyState)"
-            )
-        }
-
-        if let videoTrack = stream.videoTracks.first {
-            print("📺 PeerConnection[\(userId)]: Adding first video track to WebRTC client")
-            Task { @MainActor in
-                webRTCClient?.addRemoteVideoTrack(videoTrack, for: userId)
-            }
-        } else {
-            print("⚠️ PeerConnection[\(userId)]: No video tracks found in stream")
-        }
+        // We skip the legacy stream-based approach and rely on the modern didAdd receiver method
+        // This prevents duplicate video tracks from being added
     }
 
     func peerConnection(_ peerConnection: RTCPeerConnection, didRemove stream: RTCMediaStream) {

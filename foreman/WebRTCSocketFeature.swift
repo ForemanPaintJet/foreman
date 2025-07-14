@@ -27,8 +27,8 @@ struct WebRTCSocketFeature {
 
         var loadingItems: Set<LoadingItem> = []
         var connectionStatus: ConnectionStatus = .disconnected
-        var serverURL: String = "ws://localhost:8765"
-        var roomId: String = "test-room"
+        var serverURL: String = "ws://192.168.1.109:8765"
+        var roomId: String = "oak-room"
         var userId: String = ""
         var connectedUsers: [String] = []
         var lastError: String?
@@ -207,8 +207,8 @@ struct WebRTCSocketFeature {
                 return .none
 
             case .view(.connectToServer):
-                guard !state.serverURL.isEmpty else {
-                    return .send(._internal(.errorOccurred("Server URL is required")))
+                guard !state.serverURL.isEmpty && !state.roomId.isEmpty && !state.userId.isEmpty else {
+                    return .send(._internal(.errorOccurred("Server URL, Room ID, and User ID are required")))
                 }
 
                 return .run { [serverURL = state.serverURL] send in
@@ -221,36 +221,19 @@ struct WebRTCSocketFeature {
                     }
 
                     do {
+                        // Connect to server - this will start the WebSocket connection
+                        // We'll wait for the server's 'connected' event before joining the room
                         try await socketClient.connect(url)
                         await send(._internal(.socketConnected))
                         await send(.delegate(.didConnect))
                     } catch {
-                        await send(._internal(.errorOccurred(error.localizedDescription)))
+                        await send(._internal(.errorOccurred("Failed to connect: \(error.localizedDescription)")))
+                        await send(._internal(.setLoading(.connecting, false)))
                     }
-
-                    await send(._internal(.setLoading(.connecting, false)))
                 }
 
             case .view(.disconnect):
-                if state.isJoinedToRoom {
-                    state.alert = AlertState {
-                        TextState("Disconnect from Server")
-                    } actions: {
-                        ButtonState(role: .cancel) {
-                            TextState("Cancel")
-                        }
-                        ButtonState(action: .confirmDisconnect) {
-                            TextState("Disconnect")
-                        }
-                    } message: {
-                        TextState(
-                            "You are currently in a room. Disconnecting will leave the room. Continue?"
-                        )
-                    }
-                    return .none
-                } else {
-                    return executeDisconnect(state: &state)
-                }
+                return executeDisconnect(state: &state)
 
             case .view(.joinRoom):
                 guard !state.roomId.isEmpty && !state.userId.isEmpty else {
@@ -388,6 +371,32 @@ struct WebRTCSocketFeature {
                 if let data = message.data {
                     print("📨 TCA: Message data keys: \(data.keys.sorted())")
                 }
+                
+                // Handle special server events
+                if message.type == "connected" {
+                    print("🔗 TCA: Server confirmed connection, auto-joining room")
+                    if let data = message.data, let serverUserId = data["user_id"] as? String {
+                        print("🔗 TCA: Server assigned user ID: \(serverUserId)")
+                        // Optionally update our user ID if the server assigned one
+                    }
+                    
+                    // Auto-join room now that server connection is confirmed
+                    return .run { [roomId = state.roomId, userId = state.userId] send in
+                        await send(._internal(.setLoading(.connecting, false)))
+                        await send(._internal(.setLoading(.joiningRoom, true)))
+                        
+                        do {
+                            try await socketClient.joinRoom(roomId, userId)
+                            await send(._internal(.roomJoined))
+                            await send(.delegate(.didJoinRoom(roomId)))
+                        } catch {
+                            await send(._internal(.errorOccurred("Failed to join room: \(error.localizedDescription)")))
+                        }
+                        
+                        await send(._internal(.setLoading(.joiningRoom, false)))
+                    }
+                }
+                
                 state.messages.append(message)
                 // Keep only last 50 messages
                 if state.messages.count > 50 {
@@ -551,8 +560,24 @@ struct WebRTCSocketFeature {
     // MARK: - Helper Functions
 
     private func executeDisconnect(state: inout State) -> Effect<Action> {
-        return .run { send in
+        return .run { [isJoinedToRoom = state.isJoinedToRoom, roomId = state.roomId, connectedUsers = state.connectedUsers] send in
             do {
+                // Leave room first if joined
+                if isJoinedToRoom {
+                    await send(._internal(.setLoading(.leavingRoom, true)))
+                    try await socketClient.leaveRoom(roomId)
+                    await send(._internal(.roomLeft))
+                    await send(.delegate(.didLeaveRoom))
+                    await send(._internal(.setLoading(.leavingRoom, false)))
+                    
+                    // Remove all peer connections when leaving room
+                    for userId in connectedUsers {
+                        await webRTCClient.removePeerConnection(userId)
+                        await send(._internal(.peerConnectionRemoved(userId)))
+                    }
+                }
+                
+                // Then disconnect from server
                 try await socketClient.disconnect()
                 await send(._internal(.socketDisconnected))
                 await send(.delegate(.didDisconnect))

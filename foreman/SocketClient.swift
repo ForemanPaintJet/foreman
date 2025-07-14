@@ -97,10 +97,9 @@ class SocketClient: ObservableObject {
         urlSessionWebSocketTask = session.webSocketTask(with: socketURL)
 
         urlSessionWebSocketTask?.resume()
-        connectionStatus = .connected
-        print("✅ SocketClient: Connection established successfully")
+        print("🔌 SocketClient: WebSocket task started, waiting for server confirmation")
 
-        // Start listening for messages
+        // Start listening for messages - connection status will be updated when we receive 'connected' event
         await listenForMessages()
     }
 
@@ -290,6 +289,10 @@ class SocketClient: ObservableObject {
                 else if messageObject["room"] != nil && messageObject["users"] != nil {
                     event = "room_joined"
                 }
+                // Detect connected messages
+                else if messageObject["user_id"] != nil {
+                    event = "connected"
+                }
 
                 guard let detectedEvent = event else {
                     print("❌ SocketClient: Could not determine message type from: \(messageObject)")
@@ -323,6 +326,18 @@ class SocketClient: ObservableObject {
         messageSubject.send(socketMessage)
 
         switch event {
+        case "connected":
+            // Handle server connection confirmation
+            print("🔗 SocketClient: Server confirmed connection - updating status to connected")
+            connectionStatus = .connected
+            if let userId = data["user_id"] as? String {
+                print("🔗 SocketClient: Server assigned user ID: \(userId)")
+                // Optionally update our current user ID if server assigned one
+                // currentUserId = userId
+            } else {
+                print("🔗 SocketClient: Server confirmed connection")
+            }
+            
         case "offer":
             // Handle server's offer format: {"from_user": "...", "offer": {"sdp": "...", "type": "offer"}}
             if let fromUser = data["from_user"] as? String,

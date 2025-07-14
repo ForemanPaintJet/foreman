@@ -7,17 +7,27 @@
 
 import ComposableArchitecture
 import SwiftUI
+import ForemanThemeCore
 
 struct WebRTCSocketView: View {
     @Bindable var store: StoreOf<WebRTCSocketFeature>
-
+    @Dependency(\.themeService) var themeService
+    
+    // Orange theme configuration
+    private var themeConfig: ThemeConfiguration<DynamicTheme> {
+        themeService.themeConfiguration(for: .orange, variant: .vibrant)
+    }
+    
     var body: some View {
         NavigationStack {
             ZStack {
+                // Orange themed background
+                themeConfig.colorTheme.background
+                    .ignoresSafeArea()
+                
                 ScrollView {
                     LazyVStack(spacing: 20) {
                         connectionSection
-                        roomSection
                         if store.isJoinedToRoom {
                             connectedUsersSection
                         }
@@ -26,16 +36,23 @@ struct WebRTCSocketView: View {
                     }
                     .padding()
                 }
+                
+                if store.isJoinedToRoom {
+                    // Video Viewer View
+                    VideoCallViewWrapper(store: store)
+                }
             }
             .navigationTitle("WebRTC Socket")
             .navigationBarTitleDisplayMode(.large)
-            .alert($store.scope(state: \.alert, action: \.alert))
-            .onAppear {
-                store.send(.view(.onAppear))
-            }
-            .onDisappear {
-                store.send(.view(.onDisappear))
-            }
+        }
+        .frame(maxWidth: 1000, maxHeight: 800) // Limit the view size instead of taking whole screen
+        .clipShape(RoundedRectangle(cornerRadius: 12)) // Add rounded corners for better visual containment
+        .alert($store.scope(state: \.alert, action: \.alert))
+        .onAppear {
+            store.send(.view(.onAppear))
+        }
+        .onDisappear {
+            store.send(.view(.onDisappear))
         }
     }
 
@@ -43,7 +60,7 @@ struct WebRTCSocketView: View {
 
     private var connectionSection: some View {
         VStack(alignment: .leading, spacing: 16) {
-            SectionHeader(title: "Server Connection", icon: "network")
+            SectionHeader(title: "Server Connection", icon: "network", themeConfig: themeConfig)
 
             VStack(spacing: 12) {
                 // Server URL Input
@@ -51,7 +68,7 @@ struct WebRTCSocketView: View {
                     Text("Server URL")
                         .font(.subheadline)
                         .fontWeight(.medium)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(themeConfig.colorTheme.secondary)
 
                     TextField(
                         "ws://192.168.1.105:4000",
@@ -61,10 +78,35 @@ struct WebRTCSocketView: View {
                     .disabled(store.connectionStatus != .disconnected)
                 }
 
+                // Room ID Input
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Room ID")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(themeConfig.colorTheme.secondary)
+
+                    TextField("Enter room ID", text: $store.roomId.sending(\.view.updateRoomId))
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .disabled(store.connectionStatus != .disconnected)
+                }
+
+                // User ID Input
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("User ID")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(themeConfig.colorTheme.secondary)
+
+                    TextField("Your user ID", text: $store.userId.sending(\.view.updateUserId))
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .disabled(store.connectionStatus != .disconnected)
+                }
+
                 // Connection Status
                 ConnectionStatusCard(
                     status: store.connectionStatus,
-                    lastError: store.lastError
+                    lastError: store.lastError,
+                    themeConfig: themeConfig
                 ) {
                     store.send(.view(.clearError))
                 }
@@ -72,10 +114,10 @@ struct WebRTCSocketView: View {
                 // Connection Buttons
                 HStack(spacing: 12) {
                     OperationButton(
-                        title: "Connect",
+                        title: "Connect & Join Room",
                         icon: "network",
-                        color: .green,
-                        isExecuting: store.loadingItems.contains(.connecting),
+                        color: themeConfig.colorTheme.goldenColor,
+                        isExecuting: store.loadingItems.contains(.connecting) || store.loadingItems.contains(.joiningRoom),
                         isEnabled: store.canConnect
                     ) {
                         store.send(.view(.connectToServer))
@@ -84,7 +126,7 @@ struct WebRTCSocketView: View {
                     OperationButton(
                         title: "Disconnect",
                         icon: "network.slash",
-                        color: .red,
+                        color: Color.red,
                         isExecuting: false,
                         isEnabled: store.connectionStatus == .connected
                     ) {
@@ -96,71 +138,8 @@ struct WebRTCSocketView: View {
         .padding()
         .background(
             RoundedRectangle(cornerRadius: 16)
-                .fill(.white)
-                .shadow(color: .black.opacity(0.05), radius: 5, x: 0, y: 2)
-        )
-    }
-
-    // MARK: - Room Section
-
-    private var roomSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            SectionHeader(title: "Room Management", icon: "person.2")
-
-            VStack(spacing: 12) {
-                // Room ID Input
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Room ID")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(.secondary)
-
-                    TextField("Enter room ID", text: $store.roomId.sending(\.view.updateRoomId))
-                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                        .disabled(store.isJoinedToRoom)
-                }
-
-                // User ID Input
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("User ID")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(.secondary)
-
-                    TextField("Your user ID", text: $store.userId.sending(\.view.updateUserId))
-                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                        .disabled(store.isJoinedToRoom)
-                }
-
-                // Room Buttons
-                HStack(spacing: 12) {
-                    OperationButton(
-                        title: "Join Room",
-                        icon: "plus.circle",
-                        color: .blue,
-                        isExecuting: store.loadingItems.contains(.joiningRoom),
-                        isEnabled: store.canJoinRoom
-                    ) {
-                        store.send(.view(.joinRoom))
-                    }
-
-                    OperationButton(
-                        title: "Leave Room",
-                        icon: "minus.circle",
-                        color: .orange,
-                        isExecuting: store.loadingItems.contains(.leavingRoom),
-                        isEnabled: store.canLeaveRoom
-                    ) {
-                        store.send(.view(.leaveRoom))
-                    }
-                }
-            }
-        }
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(.white)
-                .shadow(color: .black.opacity(0.05), radius: 5, x: 0, y: 2)
+                .fill(themeConfig.colorTheme.lightColor)
+                .shadow(color: themeConfig.colorTheme.primary.opacity(0.1), radius: 5, x: 0, y: 2)
         )
     }
 
@@ -168,11 +147,11 @@ struct WebRTCSocketView: View {
 
     private var connectedUsersSection: some View {
         VStack(alignment: .leading, spacing: 16) {
-            SectionHeader(title: "Connected Users", icon: "person.3")
+            SectionHeader(title: "Connected Users", icon: "person.3", themeConfig: themeConfig)
 
             if store.connectedUsers.isEmpty {
                 Text("No other users in the room")
-                    .foregroundColor(.secondary)
+                    .foregroundColor(themeConfig.colorTheme.secondary)
                     .italic()
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding()
@@ -182,6 +161,7 @@ struct WebRTCSocketView: View {
                         UserRow(
                             userId: user,
                             isCurrentUser: user == store.userId,
+                            themeConfig: themeConfig,
                             onSendOffer: {
                                 // Mock WebRTC offer for demo
                                 store.send(.view(.sendOffer(to: user, sdp: "mock-sdp-offer")))
@@ -198,8 +178,8 @@ struct WebRTCSocketView: View {
         .padding()
         .background(
             RoundedRectangle(cornerRadius: 16)
-                .fill(.white)
-                .shadow(color: .black.opacity(0.05), radius: 5, x: 0, y: 2)
+                .fill(themeConfig.colorTheme.lightColor)
+                .shadow(color: themeConfig.colorTheme.primary.opacity(0.1), radius: 5, x: 0, y: 2)
         )
     }
 
@@ -208,7 +188,7 @@ struct WebRTCSocketView: View {
     private var messagesSection: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                SectionHeader(title: "Socket Messages", icon: "message")
+                SectionHeader(title: "Socket Messages", icon: "message", themeConfig: themeConfig)
 
                 Spacer()
 
@@ -216,20 +196,20 @@ struct WebRTCSocketView: View {
                     store.send(.view(.clearMessages))
                 }
                 .font(.caption)
-                .foregroundColor(.blue)
+                .foregroundColor(themeConfig.colorTheme.primary)
             }
 
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 8) {
                     if store.messages.isEmpty {
                         Text("No messages yet")
-                            .foregroundColor(.secondary)
+                            .foregroundColor(themeConfig.colorTheme.secondary)
                             .italic()
                             .frame(maxWidth: .infinity, alignment: .center)
                             .padding()
                     } else {
                         ForEach(Array(store.messages.enumerated()), id: \.offset) { _, message in
-                            MessageRow(message: message)
+                            MessageRow(message: message, themeConfig: themeConfig)
                         }
                     }
                 }
@@ -240,8 +220,8 @@ struct WebRTCSocketView: View {
         .padding()
         .background(
             RoundedRectangle(cornerRadius: 16)
-                .fill(.white)
-                .shadow(color: .black.opacity(0.05), radius: 5, x: 0, y: 2)
+                .fill(themeConfig.colorTheme.lightColor)
+                .shadow(color: themeConfig.colorTheme.primary.opacity(0.1), radius: 5, x: 0, y: 2)
         )
     }
 
@@ -249,7 +229,7 @@ struct WebRTCSocketView: View {
 
     private var webRTCControlsSection: some View {
         VStack(alignment: .leading, spacing: 16) {
-            SectionHeader(title: "Video Viewer", icon: "tv")
+            SectionHeader(title: "Video Viewer", icon: "tv", themeConfig: themeConfig)
 
             if store.isJoinedToRoom {
                 // Video Viewer Interface (Receive-only)
@@ -257,19 +237,20 @@ struct WebRTCSocketView: View {
                     // Info about receive-only mode
                     HStack {
                         Image(systemName: "eye")
-                            .foregroundColor(.blue)
+                            .foregroundColor(themeConfig.colorTheme.primary)
                         Text("Receive-Only Mode")
                             .font(.subheadline)
                             .fontWeight(.medium)
+                            .foregroundColor(themeConfig.colorTheme.darkColor)
                         Spacer()
                         Text("You can view others' video streams")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(themeConfig.colorTheme.secondary)
                     }
                     .padding()
                     .background(
                         RoundedRectangle(cornerRadius: 12)
-                            .fill(Color.blue.opacity(0.1))
+                            .fill(themeConfig.colorTheme.primary.opacity(0.1))
                     )
 
                     // Connected Users with Call Buttons
@@ -278,15 +259,17 @@ struct WebRTCSocketView: View {
                             Text("Available Streams")
                                 .font(.subheadline)
                                 .fontWeight(.medium)
+                                .foregroundColor(themeConfig.colorTheme.darkColor)
 
                             ForEach(store.connectedUsers.filter { $0 != store.userId }, id: \.self)
                             { user in
                                 HStack {
                                     Image(systemName: "person.circle")
-                                        .foregroundColor(.blue)
+                                        .foregroundColor(themeConfig.colorTheme.primary)
 
                                     Text(user)
                                         .font(.body)
+                                        .foregroundColor(themeConfig.colorTheme.darkColor)
 
                                     Spacer()
 
@@ -295,6 +278,7 @@ struct WebRTCSocketView: View {
                                     }
                                     .buttonStyle(.borderedProminent)
                                     .buttonBorderShape(.capsule)
+                                    .tint(themeConfig.colorTheme.goldenColor)
                                 }
                                 .padding(.vertical, 4)
                             }
@@ -306,18 +290,21 @@ struct WebRTCSocketView: View {
                         Text("Connection Status")
                             .font(.subheadline)
                             .fontWeight(.medium)
+                            .foregroundColor(themeConfig.colorTheme.darkColor)
 
                         HStack {
                             VStack(alignment: .leading) {
                                 InfoRow(
                                     title: "Incoming Offers",
                                     value: "\(store.pendingOffers.count)",
-                                    color: .blue
+                                    color: themeConfig.colorTheme.primary,
+                                    themeConfig: themeConfig
                                 )
                                 InfoRow(
                                     title: "Responses Sent",
                                     value: "\(store.pendingAnswers.count)",
-                                    color: .green
+                                    color: themeConfig.colorTheme.warmColor,
+                                    themeConfig: themeConfig
                                 )
                             }
 
@@ -326,55 +313,28 @@ struct WebRTCSocketView: View {
                             InfoRow(
                                 title: "ICE Candidates",
                                 value: "\(store.pendingIceCandidates.count)",
-                                color: .purple
+                                color: themeConfig.colorTheme.secondary,
+                                themeConfig: themeConfig
                             )
                         }
                     }
-
-                    // Video Viewer View
-                    NavigationLink(destination: VideoCallViewWrapper(store: store)) {
-                        HStack {
-                            Image(systemName: "tv.circle.fill")
-                                .font(.title2)
-                                .foregroundColor(.blue)
-
-                            Text("Open Video Viewer")
-                                .font(.headline)
-
-                            Spacer()
-
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                        .padding()
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(Color.blue.opacity(0.1))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .stroke(Color.blue.opacity(0.3), lineWidth: 1)
-                                )
-                        )
-                    }
-                    .buttonStyle(PlainButtonStyle())
                 }
             } else {
                 Text("Join a room to start watching video streams")
                     .font(.body)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(themeConfig.colorTheme.secondary)
                     .padding()
                     .background(
                         RoundedRectangle(cornerRadius: 12)
-                            .fill(Color.gray.opacity(0.1))
+                            .fill(themeConfig.colorTheme.lightColor.opacity(0.5))
                     )
             }
         }
         .padding()
         .background(
             RoundedRectangle(cornerRadius: 16)
-                .fill(.white)
-                .shadow(color: .black.opacity(0.05), radius: 5, x: 0, y: 2)
+                .fill(themeConfig.colorTheme.lightColor)
+                .shadow(color: themeConfig.colorTheme.primary.opacity(0.1), radius: 5, x: 0, y: 2)
         )
     }
 }
@@ -384,16 +344,18 @@ struct WebRTCSocketView: View {
 struct SectionHeader: View {
     let title: String
     let icon: String
+    let themeConfig: ThemeConfiguration<DynamicTheme>
 
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: icon)
                 .font(.title2)
-                .foregroundColor(.blue)
+                .foregroundColor(themeConfig.colorTheme.primary)
 
             Text(title)
                 .font(.headline)
                 .fontWeight(.semibold)
+                .foregroundColor(themeConfig.colorTheme.darkColor)
         }
     }
 }
@@ -401,6 +363,7 @@ struct SectionHeader: View {
 struct ConnectionStatusCard: View {
     let status: ConnectionStatus
     let lastError: String?
+    let themeConfig: ThemeConfiguration<DynamicTheme>
     let onClearError: () -> Void
 
     var statusColor: Color {
@@ -431,6 +394,7 @@ struct ConnectionStatusCard: View {
                 Text(statusText)
                     .font(.subheadline)
                     .fontWeight(.medium)
+                    .foregroundColor(themeConfig.colorTheme.darkColor)
 
                 Spacer()
             }
@@ -448,7 +412,7 @@ struct ConnectionStatusCard: View {
                         onClearError()
                     }
                     .font(.caption)
-                    .foregroundColor(.blue)
+                    .foregroundColor(themeConfig.colorTheme.primary)
                 }
                 .padding(.top, 4)
             }
@@ -492,7 +456,7 @@ struct OperationButton: View {
                 RoundedRectangle(cornerRadius: 8)
                     .fill(isEnabled ? color : Color.gray)
             )
-            .foregroundColor(.white)
+            .foregroundColor(isEnabled ? .white : .gray)
         }
         .disabled(!isEnabled || isExecuting)
     }
@@ -501,6 +465,7 @@ struct OperationButton: View {
 struct UserRow: View {
     let userId: String
     let isCurrentUser: Bool
+    let themeConfig: ThemeConfiguration<DynamicTheme>
     let onSendOffer: () -> Void
     let onSendAnswer: () -> Void
 
@@ -510,11 +475,12 @@ struct UserRow: View {
                 Text(userId)
                     .font(.subheadline)
                     .fontWeight(.medium)
+                    .foregroundColor(themeConfig.colorTheme.darkColor)
 
                 if isCurrentUser {
                     Text("(You)")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(themeConfig.colorTheme.secondary)
                 }
             }
 
@@ -528,8 +494,8 @@ struct UserRow: View {
                     .font(.caption)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
-                    .background(Color.blue.opacity(0.1))
-                    .foregroundColor(.blue)
+                    .background(themeConfig.colorTheme.primary.opacity(0.1))
+                    .foregroundColor(themeConfig.colorTheme.primary)
                     .cornerRadius(6)
 
                     Button("Answer") {
@@ -538,8 +504,8 @@ struct UserRow: View {
                     .font(.caption)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
-                    .background(Color.green.opacity(0.1))
-                    .foregroundColor(.green)
+                    .background(themeConfig.colorTheme.goldenColor.opacity(0.1))
+                    .foregroundColor(themeConfig.colorTheme.goldenColor)
                     .cornerRadius(6)
                 }
             }
@@ -548,13 +514,14 @@ struct UserRow: View {
         .padding(.horizontal, 12)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(isCurrentUser ? Color.blue.opacity(0.05) : Color.gray.opacity(0.05))
+                .fill(isCurrentUser ? themeConfig.colorTheme.primary.opacity(0.05) : themeConfig.colorTheme.lightColor.opacity(0.5))
         )
     }
 }
 
 struct MessageRow: View {
     let message: SocketMessage
+    let themeConfig: ThemeConfiguration<DynamicTheme>
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -564,15 +531,15 @@ struct MessageRow: View {
                     .fontWeight(.semibold)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 2)
-                    .background(Color.blue.opacity(0.1))
-                    .foregroundColor(.blue)
+                    .background(themeConfig.colorTheme.primary.opacity(0.1))
+                    .foregroundColor(themeConfig.colorTheme.primary)
                     .cornerRadius(4)
 
                 Spacer()
 
                 Text(Date().formatted(.dateTime.hour().minute().second()))
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(themeConfig.colorTheme.secondary)
             }
 
             if let data = message.data, !data.isEmpty {
@@ -580,10 +547,11 @@ struct MessageRow: View {
                     HStack {
                         Text("\(key):")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(themeConfig.colorTheme.secondary)
 
                         Text(data[key] ?? "")
                             .font(.caption)
+                            .foregroundColor(themeConfig.colorTheme.darkColor)
                             .lineLimit(1)
 
                         Spacer()
@@ -594,7 +562,7 @@ struct MessageRow: View {
         .padding(8)
         .background(
             RoundedRectangle(cornerRadius: 6)
-                .fill(Color.gray.opacity(0.05))
+                .fill(themeConfig.colorTheme.lightColor.opacity(0.5))
         )
     }
 }
@@ -603,12 +571,13 @@ struct InfoRow: View {
     let title: String
     let value: String
     let color: Color
+    let themeConfig: ThemeConfiguration<DynamicTheme>
 
     var body: some View {
         HStack {
             Text(title)
                 .font(.subheadline)
-                .foregroundColor(.secondary)
+                .foregroundColor(themeConfig.colorTheme.secondary)
 
             Spacer()
 
@@ -624,8 +593,8 @@ struct InfoRow: View {
 
 extension WebRTCSocketFeature.State {
     var canConnect: Bool {
-        !serverURL.isEmpty && connectionStatus == .disconnected
-            && !loadingItems.contains(.connecting)
+        !serverURL.isEmpty && !roomId.isEmpty && !userId.isEmpty && connectionStatus == .disconnected
+            && !loadingItems.contains(.connecting) && !loadingItems.contains(.joiningRoom)
     }
 
     var canJoinRoom: Bool {
