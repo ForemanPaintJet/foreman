@@ -36,6 +36,16 @@
 		41A1FB922E16AF3500A9EDA5 /* foremanUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = foremanUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		41CE97F82E2A948D00C7FAAF /* Exceptions for "foremanTests" folder in "foremanTests" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				AppThemesTests.swift,
+			);
+			target = 41A1FB872E16AF3500A9EDA5 /* foremanTests */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		4158982F2E1E8FD900B01E9D /* foreman */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
@@ -44,6 +54,9 @@
 		};
 		41A1FB8B2E16AF3500A9EDA5 /* foremanTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				41CE97F82E2A948D00C7FAAF /* Exceptions for "foremanTests" folder in "foremanTests" target */,
+			);
 			path = foremanTests;
 			sourceTree = "<group>";
 		};

@@ -14,12 +14,6 @@ import MQTTNIO
 import NIOCore
 import SwiftUI
 
-extension MqttClientKitInfo: @retroactive Equatable {
-    public static func == (lhs: MqttClientKitInfo, rhs: MqttClientKitInfo) -> Bool {
-        true
-    }
-}
-
 // MARK: - WebRTC MQTT Feature
 
 @Reducer
