@@ -7,8 +7,8 @@ struct ContentView: View {
             AnimatedMeshBackground()
             
             // Your main app content goes here
-            WebRTCSocketView(store: .init(initialState: WebRTCSocketFeature.State(), reducer: {
-                WebRTCSocketFeature()
+            WebRTCMqttView(store: .init(initialState: WebRTCMqttFeature.State(), reducer: {
+                WebRTCMqttFeature()
             }))
         }
     }

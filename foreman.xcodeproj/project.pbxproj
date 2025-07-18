@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		41B494572E16BA3900890E09 /* ComposableArchitecture in Frameworks */ = {isa = PBXBuildFile; productRef = 41B494562E16BA3900890E09 /* ComposableArchitecture */; };
 		41B494592E16BA3A00890E09 /* WebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = 41B494582E16BA3A00890E09 /* WebRTC */; };
+		41CE97EF2E29FD0500C7FAAF /* MqttClientKit in Frameworks */ = {isa = PBXBuildFile; productRef = 41CE97EE2E29FD0500C7FAAF /* MqttClientKit */; };
 		41DECCD22E1E55D800C52C6F /* ForemanThemeCore in Frameworks */ = {isa = PBXBuildFile; productRef = 41DECCD12E1E55D800C52C6F /* ForemanThemeCore */; };
 /* End PBXBuildFile section */
 
@@ -60,6 +61,7 @@
 			files = (
 				41B494572E16BA3900890E09 /* ComposableArchitecture in Frameworks */,
 				41DECCD22E1E55D800C52C6F /* ForemanThemeCore in Frameworks */,
+				41CE97EF2E29FD0500C7FAAF /* MqttClientKit in Frameworks */,
 				41B494592E16BA3A00890E09 /* WebRTC in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -132,6 +134,7 @@
 				41B494562E16BA3900890E09 /* ComposableArchitecture */,
 				41B494582E16BA3A00890E09 /* WebRTC */,
 				41DECCD12E1E55D800C52C6F /* ForemanThemeCore */,
+				41CE97EE2E29FD0500C7FAAF /* MqttClientKit */,
 			);
 			productName = foreman;
 			productReference = 41A1FB7A2E16AF3200A9EDA5 /* foreman.app */;
@@ -219,6 +222,7 @@
 				41B4944F2E16B07100890E09 /* XCRemoteSwiftPackageReference "swift-composable-architecture" */,
 				41B494502E16B10A00890E09 /* XCRemoteSwiftPackageReference "WebRTC" */,
 				41DECCD02E1E559100C52C6F /* XCLocalSwiftPackageReference "Packages/ForemanThemeCore" */,
+				41CE97ED2E29FCF200C7FAAF /* XCRemoteSwiftPackageReference "MqttClientKit" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 41A1FB7B2E16AF3200A9EDA5 /* Products */;
@@ -645,6 +649,14 @@
 				minimumVersion = 137.0.0;
 			};
 		};
+		41CE97ED2E29FCF200C7FAAF /* XCRemoteSwiftPackageReference "MqttClientKit" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/Paintjed/MqttClientKit";
+			requirement = {
+				branch = main;
+				kind = branch;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -657,6 +669,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 41B494502E16B10A00890E09 /* XCRemoteSwiftPackageReference "WebRTC" */;
 			productName = WebRTC;
+		};
+		41CE97EE2E29FD0500C7FAAF /* MqttClientKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 41CE97ED2E29FCF200C7FAAF /* XCRemoteSwiftPackageReference "MqttClientKit" */;
+			productName = MqttClientKit;
 		};
 		41DECCD12E1E55D800C52C6F /* ForemanThemeCore */ = {
 			isa = XCSwiftPackageProductDependency;
