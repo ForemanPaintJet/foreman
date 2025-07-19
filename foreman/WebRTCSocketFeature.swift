@@ -27,7 +27,7 @@ struct WebRTCSocketFeature {
 
         var loadingItems: Set<LoadingItem> = []
         var connectionStatus: ConnectionStatus = .disconnected
-        var serverURL: String = "ws://192.168.1.109:8765"
+        var serverURL: String = "ws://192.168.1.112:8765"
         var roomId: String = "oak-room"
         var userId: String = ""
         var connectedUsers: [String] = []

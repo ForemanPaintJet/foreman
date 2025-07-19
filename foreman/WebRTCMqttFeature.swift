@@ -9,8 +9,8 @@ import Combine
 import ComposableArchitecture
 import Foundation
 import Logging
-import MqttClientKit
 import MQTTNIO
+import MqttClientKit
 import NIOCore
 import SwiftUI
 
@@ -32,7 +32,7 @@ struct WebRTCMqttFeature {
         var loadingItems: Set<LoadingItem> = []
         var connectionStatus: MqttClientKit.State = .idle
         var mqttInfo: MqttClientKitInfo = .init(
-            address: "127.0.0.1", port: 1883, clientID: "")
+            address: "192.168.1.112", port: 1883, clientID: "")
         var roomId: String = "webrtc/room/test-room"
         var userId: String = ""
         var connectedUsers: [String] = []
@@ -260,12 +260,13 @@ struct WebRTCMqttFeature {
                 logger.info("🟠 [WebRTC] Sending offer to: \(to), sdp length: \(sdp.count)")
                 // Publish offer to MQTT topic
                 let offer = WebRTCOffer(sdp: sdp, type: "offer", from: state.userId, to: to)
+                let topic = state.roomId
                 return .run { send in
                     await send(._internal(.setLoading(.sendingOffer, true)))
                     do {
                         let payload = try JSONEncoder().encode(offer)
                         let info = MQTTPublishInfo(
-                            qos: .atLeastOnce, retain: false, topicName: to,
+                            qos: .atLeastOnce, retain: false, topicName: topic,
                             payload: ByteBuffer(data: payload), properties: .init([]))
                         try await mqttClientKit.publish(info)
                     } catch {
@@ -277,12 +278,13 @@ struct WebRTCMqttFeature {
             case .view(.sendAnswer(let to, let sdp)):
                 logger.info("🟠 [WebRTC] Sending answer to: \(to), sdp length: \(sdp.count)")
                 let answer = WebRTCAnswer(sdp: sdp, type: "answer", from: state.userId, to: to)
+                let topic = state.roomId
                 return .run { send in
                     await send(._internal(.setLoading(.sendingAnswer, true)))
                     do {
                         let payload = try JSONEncoder().encode(answer)
                         let info = MQTTPublishInfo(
-                            qos: .atLeastOnce, retain: false, topicName: to,
+                            qos: .atLeastOnce, retain: false, topicName: topic,
                             payload: ByteBuffer(data: payload), properties: .init([]))
                         try await mqttClientKit.publish(info)
                     } catch {
@@ -296,14 +298,15 @@ struct WebRTCMqttFeature {
                     "🟠 [WebRTC] Sending ICE candidate to: \(to), candidate: \(candidate.prefix(20))..."
                 )
                 let iceCandidate = ICECandidate(
-                    candidate: candidate, sdpMLineIndex: sdpMLineIndex, sdpMid: sdpMid,
+                    candidate: candidate, sdpMLineIndex: sdpMLineIndex, sdpMid: sdpMid ?? "",
                     from: state.userId, to: to)
+                let topic = state.roomId
                 return .run { send in
                     await send(._internal(.setLoading(.sendingIceCandidate, true)))
                     do {
                         let payload = try JSONEncoder().encode(iceCandidate)
                         let info = MQTTPublishInfo(
-                            qos: .atLeastOnce, retain: false, topicName: to,
+                            qos: .atLeastOnce, retain: false, topicName: topic,
                             payload: ByteBuffer(data: payload), properties: .init([]))
                         try await mqttClientKit.publish(info)
                     } catch {
@@ -357,7 +360,76 @@ struct WebRTCMqttFeature {
                 if state.messages.count > 50 {
                     state.messages.removeFirst()
                 }
-                // TODO: Parse message and handle offers/answers/ICE
+
+                // Parse message and dispatch to appropriate internal action
+                if let data = message.payload.getData(at: 0, length: message.payload.readableBytes)
+                {
+                    do {
+                        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+                        if let json = json, let type = json["type"] as? String,
+                            let clientId = json["clientId"] as? String
+                        {
+                            switch type {
+                            case "offer":
+                                if let sdp = json["sdp"] as? String {
+                                    let offer = WebRTCOffer(
+                                        sdp: sdp, type: type, from: clientId, to: state.userId)
+                                    logger.info("🟠 [MQTT] Parsed offer message")
+                                    if clientId == "self" {
+                                        logger.info("Ignore \(clientId) message.")
+                                        return .none
+                                    }
+                                    return .send(._internal(.offerReceived(offer)))
+                                }
+                            case "answer":
+                                if let sdp = json["sdp"] as? String {
+                                    let answer = WebRTCAnswer(
+                                        sdp: sdp, type: type, from: clientId, to: state.userId)
+                                    logger.info("🟠 [MQTT] Parsed answer message")
+                                    if clientId == "self" {
+                                        logger.info("Ignore \(clientId) message.")
+                                        return .none
+                                    }
+                                    return .send(._internal(.answerReceived(answer)))
+                                }
+                            case "ice":
+                                if let candidateObj = json["candidate"] as? [String: Any],
+                                    let candidate = candidateObj["candidate"] as? String,
+                                    let sdpMLineIndex = candidateObj["sdpMLineIndex"] as? Int
+                                {
+                                    let sdpMid: String? = candidateObj["sdpMid"] as? String
+                                    let ice = ICECandidate(
+                                        candidate: candidate, sdpMLineIndex: sdpMLineIndex,
+                                        sdpMid: sdpMid!, from: clientId, to: state.userId)
+                                    logger.info("🟠 [MQTT] Parsed ICE message")
+                                    if clientId == "self" {
+                                        logger.info("Ignore \(clientId) message.")
+                                        return .none
+                                    }
+                                    return .send(._internal(.iceCandidateReceived(ice)))
+                                }
+                            case "requestVideo":
+                                logger.info(
+                                    "🟠 [MQTT] Received requestVideo message from clientId=\(clientId)"
+                                )
+                                // You can add handling logic here if needed
+                                return .none
+                            case "leaveVideo":
+                                logger.info(
+                                    "🟠 [MQTT] Received leaveVideo message from clientId=\(clientId)"
+                                )
+                                // You can add handling logic here if needed
+                                return .none
+                            default:
+                                logger.info("🟠 [MQTT] Unrecognized type: \(type)")
+                                return .none
+                            }
+                        }
+                    } catch {
+                        logger.error("🔴 [MQTT] Failed to parse MQTT message payload: \(error)")
+                    }
+                }
+                logger.info("🟠 [MQTT] Unrecognized MQTT message payload")
                 return .none
 
             case ._internal(.offerReceived(let offer)):
@@ -461,11 +533,12 @@ struct WebRTCMqttFeature {
 
             // WebRTC Internal Actions
             case ._internal(.webRTCOfferGenerated(let offer)):
+                let topic = state.roomId
                 return .run { send in
                     do {
                         let payload = try JSONEncoder().encode(offer)
                         let info = MQTTPublishInfo(
-                            qos: .atLeastOnce, retain: false, topicName: offer.to,
+                            qos: .atLeastOnce, retain: false, topicName: topic,
                             payload: ByteBuffer(data: payload), properties: .init([]))
                         try await mqttClientKit.publish(info)
                     } catch {
@@ -477,11 +550,12 @@ struct WebRTCMqttFeature {
                 }
 
             case ._internal(.webRTCAnswerGenerated(let answer)):
+                let topic = state.roomId
                 return .run { send in
                     do {
                         let payload = try JSONEncoder().encode(answer)
                         let info = MQTTPublishInfo(
-                            qos: .atLeastOnce, retain: false, topicName: answer.to,
+                            qos: .atLeastOnce, retain: false, topicName: topic,
                             payload: ByteBuffer(data: payload), properties: .init([]))
                         try await mqttClientKit.publish(info)
                     } catch {
@@ -493,11 +567,12 @@ struct WebRTCMqttFeature {
                 }
 
             case ._internal(.webRTCIceCandidateGenerated(let candidate)):
+                let topic = state.roomId
                 return .run { send in
                     do {
                         let payload = try JSONEncoder().encode(candidate)
                         let info = MQTTPublishInfo(
-                            qos: .atLeastOnce, retain: false, topicName: candidate.to,
+                            qos: .atLeastOnce, retain: false, topicName: topic,
                             payload: ByteBuffer(data: payload), properties: .init([]))
                         try await mqttClientKit.publish(info)
                     } catch {

@@ -126,7 +126,6 @@ struct RemoteVideoViewer: View {
                         Spacer()
                     }
                 } else {
-                    // Display remote video streams
                     RemoteVideoGrid(webRTCClient: webRTCClient)
                 }
 

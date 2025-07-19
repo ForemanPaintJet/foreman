@@ -94,6 +94,11 @@ struct WebRTCMqttView: View {
                 .background(RoundedRectangle(cornerRadius: 12).fill(Color(.systemGray6)))
 
                 Spacer()
+                
+                if store.isJoinedToRoom {
+                    DirectVideoCallView()
+                        .navigationBarHidden(true)
+                }
             }
             .navigationTitle("WebRTC MQTT")
             .padding()
