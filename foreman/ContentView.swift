@@ -4,7 +4,10 @@ struct ContentView: View {
     var body: some View {
         ZStack {
             // Use the AnimatedMeshBackground as the app background
-            AnimatedMeshBackground()
+            Rectangle()
+                .fill(.orange.gradient)
+                .ignoresSafeArea()
+//            AnimatedMeshBackground()
             
 //            WebRTCSocketView(store: .init(initialState: WebRTCSocketFeature.State(), reducer: {
 //                WebRTCSocketFeature()

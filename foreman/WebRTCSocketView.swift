@@ -651,30 +651,6 @@ struct VideoCallViewWrapper: View {
     }
 }
 
-// MARK: - Direct Video Call View
-
-struct DirectVideoCallView: View {
-    @Dependency(\.webRTCClient) var webRTCClientDependency
-
-    var body: some View {
-        VideoCallView(webRTCClient: WebRTCClientLive.shared.getClient())
-            .onAppear {
-                print("🎥 DirectVideoCallView: Video viewer started with WebRTC client")
-
-                // Debug: Print current video tracks
-                let client = WebRTCClientLive.shared.getClient()
-                print(
-                    "🎥 DirectVideoCallView: Current video tracks count: \(client.remoteVideoTracks.count)"
-                )
-                for (index, track) in client.remoteVideoTracks.enumerated() {
-                    print(
-                        "🎥 Track \(index): User \(track.userId), Enabled: \(track.track?.isEnabled ?? false)"
-                    )
-                }
-            }
-    }
-}
-
 #Preview {
     WebRTCSocketView(
         store: Store(
