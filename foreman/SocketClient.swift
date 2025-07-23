@@ -23,6 +23,23 @@ struct RoomInfo: Codable, Equatable {
     let users: [String]
 }
 
+// MARK: - Video Request Models
+
+struct RequestVideoMessage: Codable, Equatable {
+    var type: String = "requestVideo"
+    let clientId: String
+    let videoSource: String
+    // Optional: resolution, format, etc.
+    // let resolution: String?
+    // let format: String?
+}
+
+struct LeaveVideoMessage: Codable, Equatable {
+    var type: String = "leaveVideo"
+    let clientId: String
+    let videoSource: String
+}
+
 struct WebRTCOffer: Codable, Equatable {
     let sdp: String
     let type: String

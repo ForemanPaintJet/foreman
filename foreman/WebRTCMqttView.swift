@@ -21,9 +21,11 @@ struct WebRTCMqttView: View {
                 .fill(.orange.gradient)
                 .ignoresSafeArea()
             Group {
-                if store.isJoinedToRoom {
-                    DirectVideoCallView()
-                } else {
+//                if store.isJoinedToRoom {
+//                    DirectVideoCallView(store: .init(initialState: DirectVideoCallFeature.State(), reducer: {
+//                        DirectVideoCallFeature()
+//                    }))
+//                } else {
                     VStack {
                         Spacer()
                         VStack(spacing: 20) {
@@ -41,8 +43,6 @@ struct WebRTCMqttView: View {
                                 )
                                 .textFieldStyle(RoundedBorderTextFieldStyle())
                                 TextField("User ID", text: $store.userId.sending(\.view.updateUserId))
-                                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                                TextField("Room ID", text: $store.roomId.sending(\.view.updateRoomId))
                                     .textFieldStyle(RoundedBorderTextFieldStyle())
                                 
                                 HStack {
@@ -74,7 +74,7 @@ struct WebRTCMqttView: View {
                     .navigationTitle("WebRTC MQTT")
                     .padding()
                 }
-            }
+//            }
         }
         .onAppear {
             logger.info("WebRTCMqttView appeared")

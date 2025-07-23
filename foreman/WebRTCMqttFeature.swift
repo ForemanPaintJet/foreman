@@ -16,6 +16,10 @@ import SwiftUI
 
 // MARK: - WebRTC MQTT Feature
 
+
+let inputTopic = "camera_system/streaming/in"
+let outputTopic = "camera_system/streaming/out"
+
 @Reducer
 struct WebRTCMqttFeature {
     @ObservableState
@@ -32,8 +36,8 @@ struct WebRTCMqttFeature {
         var loadingItems: Set<LoadingItem> = []
         var connectionStatus: MqttClientKit.State = .idle
         var mqttInfo: MqttClientKitInfo = .init(
-            address: "192.168.1.112", port: 1883, clientID: "")
-        var roomId: String = "webrtc/room/test-room"
+            address: "192.168.0.137", port: 1883, clientID: "")
+        
         var userId: String = ""
         var connectedUsers: [String] = []
         var lastError: String?
@@ -180,7 +184,7 @@ struct WebRTCMqttFeature {
                 return .none
 
             case .view(.updateRoomId(let roomId)):
-                state.roomId = roomId
+//                state.roomId = roomId
                 return .none
 
             case .view(.updateUserId(let userId)):
@@ -193,7 +197,7 @@ struct WebRTCMqttFeature {
                     "🟠 [MQTT] Connecting to broker: address=\(state.mqttInfo.address), port=\(state.mqttInfo.port), clientID=\(state.mqttInfo.clientID)"
                 )
                 guard
-                    !state.mqttInfo.address.isEmpty, !state.roomId.isEmpty,
+                    !state.mqttInfo.address.isEmpty,
                     !state.userId.isEmpty
                 else {
                     return .send(
@@ -217,23 +221,30 @@ struct WebRTCMqttFeature {
                 return executeDisconnect(state: &state)
 
             case .view(.joinRoom):
-                logger.info("🟠 [MQTT] Joining room: \(state.roomId) as userId=\(state.userId)")
-                guard !state.roomId.isEmpty, !state.userId.isEmpty else {
+                logger.info("🟠 [MQTT] userId=\(state.userId)")
+                guard !state.userId.isEmpty else {
                     return .send(._internal(.errorOccurred("Room ID and User ID are required")))
                 }
                 guard state.connectionStatus == .connected else {
                     return .send(._internal(.errorOccurred("Not connected to MQTT broker")))
                 }
-                let roomId = state.roomId
+                let userId = state.userId
                 // Implement room join logic via MQTT topic subscription
                 return .run { send in
                     await send(._internal(.setLoading(.joiningRoom, true)))
                     do {
                         let subInfo = MQTTSubscribeInfo(
-                            topicFilter: roomId, qos: .atLeastOnce)
+                            topicFilter: outputTopic, qos: .atLeastOnce)
                         _ = try await mqttClientKit.subscribe(subInfo)
+                        
+                        let msg = RequestVideoMessage(clientId: userId, videoSource: "")
+                        let payload = try JSONEncoder().encode(msg)
+                        let requestInfo = MQTTPublishInfo(qos: .exactlyOnce, retain: false, topicName: inputTopic, payload: ByteBuffer(data: payload), properties: [])
+                        
+                        try await mqttClientKit.publish(requestInfo)
+                        
                         await send(._internal(.roomJoined))
-                        await send(.delegate(.didJoinRoom(roomId)))
+                        await send(.delegate(.didJoinRoom("")))
                     } catch {
                         await send(._internal(.errorOccurred(error.localizedDescription)))
                     }
@@ -241,13 +252,17 @@ struct WebRTCMqttFeature {
                 }
 
             case .view(.leaveRoom):
-                logger.info("🟠 [MQTT] Leaving room: \(state.roomId)")
+//                logger.info("🟠 [MQTT] Leaving room: \(state.roomId)")
                 guard state.isJoinedToRoom else { return .none }
-                let roomId = state.roomId
                 return .run { send in
                     await send(._internal(.setLoading(.leavingRoom, true)))
                     do {
-                        try await mqttClientKit.unsubscribe(roomId)
+                        try await mqttClientKit.unsubscribe(outputTopic)
+                        let msg = LeaveVideoMessage(clientId: "123", videoSource: "")
+                        let payload = try JSONEncoder().encode(msg)
+                        let requestInfo = MQTTPublishInfo(qos: .exactlyOnce, retain: false, topicName: inputTopic, payload: ByteBuffer(data: payload), properties: [])
+                        try await mqttClientKit.publish(requestInfo)
+                        
                         await send(._internal(.roomLeft))
                         await send(.delegate(.didLeaveRoom))
                     } catch {
@@ -260,13 +275,12 @@ struct WebRTCMqttFeature {
                 logger.info("🟠 [WebRTC] Sending offer to: \(to), sdp length: \(sdp.count)")
                 // Publish offer to MQTT topic
                 let offer = WebRTCOffer(sdp: sdp, type: "offer", from: state.userId, to: to)
-                let topic = state.roomId
                 return .run { send in
                     await send(._internal(.setLoading(.sendingOffer, true)))
                     do {
                         let payload = try JSONEncoder().encode(offer)
                         let info = MQTTPublishInfo(
-                            qos: .atLeastOnce, retain: false, topicName: topic,
+                            qos: .atLeastOnce, retain: false, topicName: inputTopic,
                             payload: ByteBuffer(data: payload), properties: .init([]))
                         try await mqttClientKit.publish(info)
                     } catch {
@@ -278,13 +292,12 @@ struct WebRTCMqttFeature {
             case .view(.sendAnswer(let to, let sdp)):
                 logger.info("🟠 [WebRTC] Sending answer to: \(to), sdp length: \(sdp.count)")
                 let answer = WebRTCAnswer(sdp: sdp, type: "answer", from: state.userId, to: to)
-                let topic = state.roomId
                 return .run { send in
                     await send(._internal(.setLoading(.sendingAnswer, true)))
                     do {
                         let payload = try JSONEncoder().encode(answer)
                         let info = MQTTPublishInfo(
-                            qos: .atLeastOnce, retain: false, topicName: topic,
+                            qos: .atLeastOnce, retain: false, topicName: inputTopic,
                             payload: ByteBuffer(data: payload), properties: .init([]))
                         try await mqttClientKit.publish(info)
                     } catch {
@@ -300,13 +313,12 @@ struct WebRTCMqttFeature {
                 let iceCandidate = ICECandidate(
                     candidate: candidate, sdpMLineIndex: sdpMLineIndex, sdpMid: sdpMid ?? "",
                     from: state.userId, to: to)
-                let topic = state.roomId
                 return .run { send in
                     await send(._internal(.setLoading(.sendingIceCandidate, true)))
                     do {
                         let payload = try JSONEncoder().encode(iceCandidate)
                         let info = MQTTPublishInfo(
-                            qos: .atLeastOnce, retain: false, topicName: topic,
+                            qos: .atLeastOnce, retain: false, topicName: inputTopic,
                             payload: ByteBuffer(data: payload), properties: .init([]))
                         try await mqttClientKit.publish(info)
                     } catch {
@@ -533,12 +545,11 @@ struct WebRTCMqttFeature {
 
             // WebRTC Internal Actions
             case ._internal(.webRTCOfferGenerated(let offer)):
-                let topic = state.roomId
                 return .run { send in
                     do {
                         let payload = try JSONEncoder().encode(offer)
                         let info = MQTTPublishInfo(
-                            qos: .atLeastOnce, retain: false, topicName: topic,
+                            qos: .atLeastOnce, retain: false, topicName: inputTopic,
                             payload: ByteBuffer(data: payload), properties: .init([]))
                         try await mqttClientKit.publish(info)
                     } catch {
@@ -550,12 +561,11 @@ struct WebRTCMqttFeature {
                 }
 
             case ._internal(.webRTCAnswerGenerated(let answer)):
-                let topic = state.roomId
                 return .run { send in
                     do {
                         let payload = try JSONEncoder().encode(answer)
                         let info = MQTTPublishInfo(
-                            qos: .atLeastOnce, retain: false, topicName: topic,
+                            qos: .atLeastOnce, retain: false, topicName: inputTopic,
                             payload: ByteBuffer(data: payload), properties: .init([]))
                         try await mqttClientKit.publish(info)
                     } catch {
@@ -567,12 +577,11 @@ struct WebRTCMqttFeature {
                 }
 
             case ._internal(.webRTCIceCandidateGenerated(let candidate)):
-                let topic = state.roomId
                 return .run { send in
                     do {
                         let payload = try JSONEncoder().encode(candidate)
                         let info = MQTTPublishInfo(
-                            qos: .atLeastOnce, retain: false, topicName: topic,
+                            qos: .atLeastOnce, retain: false, topicName: inputTopic,
                             payload: ByteBuffer(data: payload), properties: .init([]))
                         try await mqttClientKit.publish(info)
                     } catch {
@@ -612,14 +621,13 @@ struct WebRTCMqttFeature {
     // MARK: - Helper Functions
 
     private func executeDisconnect(state: inout State) -> Effect<Action> {
-        let roomId = state.roomId
         let connectedUsers = state.connectedUsers
         let isJoinedToRoom = state.isJoinedToRoom
         return .run { send in
             do {
                 if isJoinedToRoom {
                     await send(._internal(.setLoading(.leavingRoom, true)))
-                    try await mqttClientKit.unsubscribe(roomId)
+                    try await mqttClientKit.unsubscribe(outputTopic)
                     await send(._internal(.roomLeft))
                     await send(.delegate(.didLeaveRoom))
                     await send(._internal(.setLoading(.leavingRoom, false)))

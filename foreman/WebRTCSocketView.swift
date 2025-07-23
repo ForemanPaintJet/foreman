@@ -624,8 +624,9 @@ struct VideoCallViewWrapper: View {
     var body: some View {
         VStack {
             if store.isJoinedToRoom {
-                DirectVideoCallView()
-                    .navigationBarHidden(true)
+                DirectVideoCallView(store: .init(initialState: DirectVideoCallFeature.State(), reducer: {
+                    DirectVideoCallFeature()
+                }))
             } else {
                 VStack(spacing: 20) {
                     ProgressView()
