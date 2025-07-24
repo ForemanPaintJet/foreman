@@ -276,7 +276,7 @@ struct WebRTCSocketFeature {
                 }
 
             case .view(.sendOffer(let to, let sdp)):
-                let offer = WebRTCOffer(sdp: sdp, type: "offer", from: state.userId, to: to)
+                let offer = WebRTCOffer(sdp: sdp, type: "offer", clientId: state.userId, videoSource: "")
 
                 return .run { send in
                     await send(._internal(.setLoading(.sendingOffer, true)))
@@ -291,7 +291,7 @@ struct WebRTCSocketFeature {
                 }
 
             case .view(.sendAnswer(let to, let sdp)):
-                let answer = WebRTCAnswer(sdp: sdp, type: "answer", from: state.userId, to: to)
+                let answer = WebRTCAnswer(sdp: sdp, type: "answer", clientId: state.userId, videoSource: "")
 
                 return .run { send in
                     await send(._internal(.setLoading(.sendingAnswer, true)))
@@ -306,13 +306,7 @@ struct WebRTCSocketFeature {
                 }
 
             case .view(.sendIceCandidate(let to, let candidate, let sdpMLineIndex, let sdpMid)):
-                let iceCandidate = ICECandidate(
-                    candidate: candidate,
-                    sdpMLineIndex: sdpMLineIndex,
-                    sdpMid: sdpMid,
-                    from: state.userId,
-                    to: to
-                )
+                let iceCandidate = ICECandidate(type: "ice", clientId: state.userId, candidate: .init(candidate: candidate, sdpMLineIndex: sdpMLineIndex, sdpMid: sdpMid))
 
                 return .run { send in
                     await send(._internal(.setLoading(.sendingIceCandidate, true)))
@@ -405,7 +399,7 @@ struct WebRTCSocketFeature {
                 return .none
 
             case ._internal(.offerReceived(let offer)):
-                print("🔥 TCA: Offer received from \(offer.from) to \(offer.to)")
+                print("🔥 TCA: Offer received from \(offer.clientId)")
                 print("🔥 TCA: Offer SDP length: \(offer.sdp.count)")
                 state.pendingOffers.append(offer)
 

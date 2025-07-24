@@ -21,11 +21,11 @@ struct WebRTCMqttView: View {
                 .fill(.orange.gradient)
                 .ignoresSafeArea()
             Group {
-//                if store.isJoinedToRoom {
-//                    DirectVideoCallView(store: .init(initialState: DirectVideoCallFeature.State(), reducer: {
-//                        DirectVideoCallFeature()
-//                    }))
-//                } else {
+                if store.isJoinedToRoom {
+                    DirectVideoCallView(store: .init(initialState: DirectVideoCallFeature.State(), reducer: {
+                        DirectVideoCallFeature()
+                    }))
+                } else {
                     VStack {
                         Spacer()
                         VStack(spacing: 20) {
@@ -74,7 +74,7 @@ struct WebRTCMqttView: View {
                     .navigationTitle("WebRTC MQTT")
                     .padding()
                 }
-//            }
+            }
         }
         .onAppear {
             logger.info("WebRTCMqttView appeared")

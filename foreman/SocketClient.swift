@@ -43,23 +43,27 @@ struct LeaveVideoMessage: Codable, Equatable {
 struct WebRTCOffer: Codable, Equatable {
     let sdp: String
     let type: String
-    let from: String
-    let to: String
+    let clientId: String
+    let videoSource: String
 }
 
 struct WebRTCAnswer: Codable, Equatable {
     let sdp: String
     let type: String
-    let from: String
-    let to: String
+    let clientId: String
+    let videoSource: String
 }
 
 struct ICECandidate: Codable, Equatable {
-    let candidate: String
-    let sdpMLineIndex: Int
-    let sdpMid: String?
-    let from: String
-    let to: String
+    struct Candidate: Codable, Equatable {
+        let candidate: String
+        let sdpMLineIndex: Int
+        let sdpMid: String?
+    }
+
+    let type: String
+    let clientId: String
+    let candidate: Candidate
 }
 
 enum ConnectionStatus: String, CaseIterable, Equatable {
@@ -179,7 +183,7 @@ class SocketClient: ObservableObject {
     }
 
     func sendOffer(_ offer: WebRTCOffer) async throws {
-        print("📞 SocketClient: Sending WebRTC offer to '\(offer.to)'")
+        print("📞 SocketClient: Sending WebRTC offer to '\(offer.clientId)'")
 
         // Format to match server's expected structure: {"from_user": "...", "to_user": "...", "offer": {...}}
         let offerData: [String: Any] = [
@@ -189,7 +193,7 @@ class SocketClient: ObservableObject {
 
         let data: [String: Any] = [
             "from_user": currentUserId ?? "",
-            "to_user": offer.to,
+            "client": offer.clientId,
             "offer": offerData,
         ]
 
@@ -198,7 +202,7 @@ class SocketClient: ObservableObject {
     }
 
     func sendAnswer(_ answer: WebRTCAnswer) async throws {
-        print("📞 SocketClient: Sending WebRTC answer to '\(answer.to)'")
+        print("📞 SocketClient: Sending WebRTC answer to '\(answer.clientId)'")
 
         // Format to match server's expected structure: {"from_user": "...", "to_user": "...", "answer": {...}}
         let answerData: [String: Any] = [
@@ -208,7 +212,7 @@ class SocketClient: ObservableObject {
 
         let data: [String: Any] = [
             "from_user": currentUserId ?? "",
-            "to_user": answer.to,
+            "clientId": answer.clientId,
             "answer": answerData,
         ]
 
@@ -217,18 +221,18 @@ class SocketClient: ObservableObject {
     }
 
     func sendICECandidate(_ candidate: ICECandidate) async throws {
-        print("🧊 SocketClient: Sending ICE candidate to '\(candidate.to)'")
+        print("🧊 SocketClient: Sending ICE candidate to '\(candidate.clientId)'")
 
         // Format to match server's expected structure: {"from_user": "...", "to_user": "...", "candidate": {...}}
         let candidateData: [String: Any] = [
             "candidate": candidate.candidate,
-            "sdpMLineIndex": candidate.sdpMLineIndex,
-            "sdpMid": candidate.sdpMid ?? "",
+            "sdpMLineIndex": candidate.candidate.sdpMLineIndex,
+            "sdpMid": candidate.candidate.sdpMid ?? "",
         ]
 
         let data: [String: Any] = [
             "from_user": currentUserId ?? "",
-            "to_user": candidate.to,
+            "clientId": candidate.clientId,
             "candidate": candidateData,
         ]
 
@@ -363,8 +367,7 @@ class SocketClient: ObservableObject {
                 let type = offerData["type"] as? String
             {
                 print("📞 SocketClient: Received WebRTC offer from '\(fromUser)'")
-                let offer = WebRTCOffer(
-                    sdp: sdp, type: type, from: fromUser, to: currentUserId ?? "")
+                let offer = WebRTCOffer(sdp: sdp, type: "offer", clientId: fromUser, videoSource: "")
                 offerSubject.send(offer)
             }
             // Fallback to original format
@@ -374,7 +377,7 @@ class SocketClient: ObservableObject {
                 let to = data["to"] as? String
             {
                 print("📞 SocketClient: Received WebRTC offer from '\(from)' to '\(to)'")
-                let offer = WebRTCOffer(sdp: sdp, type: type, from: from, to: to)
+                let offer = WebRTCOffer(sdp: sdp, type: "offer", clientId: from, videoSource: "")
                 offerSubject.send(offer)
             }
 
@@ -386,8 +389,7 @@ class SocketClient: ObservableObject {
                 let type = answerData["type"] as? String
             {
                 print("📞 SocketClient: Received WebRTC answer from '\(fromUser)'")
-                let answer = WebRTCAnswer(
-                    sdp: sdp, type: type, from: fromUser, to: currentUserId ?? "")
+                let answer = WebRTCAnswer(sdp: sdp, type: "answer", clientId: fromUser, videoSource: "")
                 answerSubject.send(answer)
             }
             // Fallback to original format
@@ -397,11 +399,11 @@ class SocketClient: ObservableObject {
                 let to = data["to"] as? String
             {
                 print("📞 SocketClient: Received WebRTC answer from '\(from)' to '\(to)'")
-                let answer = WebRTCAnswer(sdp: sdp, type: type, from: from, to: to)
+                let answer = WebRTCAnswer(sdp: sdp, type: "answer", clientId: from, videoSource: "")
                 answerSubject.send(answer)
             }
 
-        case "ice_candidate":
+        case "ice   ":
             // Handle server's ICE candidate format: {"from_user": "...", "candidate": {...}}
             if let fromUser = data["from_user"] as? String,
                 let candidateData = data["candidate"] as? [String: Any],
@@ -417,14 +419,9 @@ class SocketClient: ObservableObject {
                 } else if let sdpMidInt = candidateData["sdpMid"] as? Int {
                     sdpMid = String(sdpMidInt)
                 }
-
-                let iceCandidate = ICECandidate(
-                    candidate: candidate,
-                    sdpMLineIndex: sdpMLineIndex,
-                    sdpMid: sdpMid,
-                    from: fromUser,
-                    to: currentUserId ?? ""
-                )
+                
+                let iceCandidate = ICECandidate(type: "ice", clientId: fromUser, candidate: .init(candidate: candidate, sdpMLineIndex: sdpMLineIndex, sdpMid: sdpMid))
+                
                 iceCandidateSubject.send(iceCandidate)
                 print(
                     "✅ SocketClient: Successfully parsed ICE candidate with sdpMid: \(sdpMid ?? "nil")"
@@ -437,13 +434,8 @@ class SocketClient: ObservableObject {
                 let to = data["to"] as? String
             {
                 print("🧊 SocketClient: Received ICE candidate from '\(from)' to '\(to)'")
-                let iceCandidate = ICECandidate(
-                    candidate: candidate,
-                    sdpMLineIndex: sdpMLineIndex,
-                    sdpMid: data["sdpMid"] as? String,
-                    from: from,
-                    to: to
-                )
+                let iceCandidate = ICECandidate(type: "ice", clientId: from, candidate: .init(candidate: candidate, sdpMLineIndex: sdpMLineIndex, sdpMid: ""))
+                
                 iceCandidateSubject.send(iceCandidate)
             } else {
                 print("❌ SocketClient: Invalid ICE candidate format: \(data)")

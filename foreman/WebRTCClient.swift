@@ -181,12 +181,7 @@ class WebRTCClient: NSObject, ObservableObject {
             let offer = try await peerConnection.offer(for: constraints)
             try await peerConnection.setLocalDescription(offer)
 
-            let webRTCOffer = WebRTCOffer(
-                sdp: offer.sdp,
-                type: "offer",
-                from: "self",  // You might want to use actual user ID
-                to: userId
-            )
+            let webRTCOffer = WebRTCOffer(sdp: offer.sdp, type: "offer", clientId: userId, videoSource: "")
 
             offerSubject.send(webRTCOffer)
             print("✅ WebRTCClient: Offer created and sent for \(userId)")
@@ -197,7 +192,7 @@ class WebRTCClient: NSObject, ObservableObject {
     }
 
     func handleRemoteOffer(_ offer: WebRTCOffer) async throws {
-        let userId = offer.from
+        let userId = offer.clientId
 
         print("📞 WebRTCClient: Handling remote offer from \(userId)")
         print("📞 WebRTCClient: Offer SDP length: \(offer.sdp.count)")
@@ -247,13 +242,8 @@ class WebRTCClient: NSObject, ObservableObject {
             print(
                 "🧊 WebRTCClient: ICE connection state after setting local description: \(peerConnection.iceConnectionState.rawValue)"
             )
-
-            let webRTCAnswer = WebRTCAnswer(
-                sdp: answer.sdp,
-                type: "answer",
-                from: "self",  // You might want to use actual user ID
-                to: userId
-            )
+            
+            let webRTCAnswer = WebRTCAnswer(sdp: answer.sdp, type: "answer", clientId: userId, videoSource: "")
 
             answerSubject.send(webRTCAnswer)
             print("✅ WebRTCClient: Answer created and sent for \(userId)")
@@ -275,7 +265,7 @@ class WebRTCClient: NSObject, ObservableObject {
     }
 
     func handleRemoteAnswer(_ answer: WebRTCAnswer) async throws {
-        let userId = answer.from
+        let userId = answer.clientId
 
         print("📞 WebRTCClient: Handling remote answer from \(userId)")
 
@@ -295,7 +285,7 @@ class WebRTCClient: NSObject, ObservableObject {
     }
 
     func handleRemoteIceCandidate(_ candidate: ICECandidate) async throws {
-        let userId = candidate.from
+        let userId = candidate.clientId
 
         print("🧊 WebRTCClient: Handling ICE candidate from \(userId)")
 
@@ -304,9 +294,9 @@ class WebRTCClient: NSObject, ObservableObject {
         }
 
         let iceCandidate = RTCIceCandidate(
-            sdp: candidate.candidate,
-            sdpMLineIndex: Int32(candidate.sdpMLineIndex),
-            sdpMid: candidate.sdpMid
+            sdp: candidate.candidate.candidate,
+            sdpMLineIndex: Int32(candidate.candidate.sdpMLineIndex),
+            sdpMid: candidate.candidate.sdpMid
         )
 
         do {
@@ -367,14 +357,8 @@ class WebRTCClient: NSObject, ObservableObject {
         print(
             "🧊 WebRTCClient: Candidate details - M-Line: \(candidate.sdpMLineIndex), MID: \(candidate.sdpMid ?? "nil")"
         )
-
-        let iceCandidate = ICECandidate(
-            candidate: candidate.sdp,
-            sdpMLineIndex: Int(candidate.sdpMLineIndex),
-            sdpMid: candidate.sdpMid,
-            from: "self",  // You might want to use actual user ID
-            to: userId
-        )
+        
+        let iceCandidate = ICECandidate(type: "ice", clientId: userId, candidate: .init(candidate: candidate.sdp, sdpMLineIndex: Int(candidate.sdpMLineIndex), sdpMid: candidate.sdp))
 
         iceCandidateSubject.send(iceCandidate)
         print("🧊 WebRTCClient: ICE candidate sent to signaling for \(userId)")

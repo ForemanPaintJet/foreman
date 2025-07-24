@@ -36,7 +36,7 @@ struct WebRTCMqttFeature {
         var loadingItems: Set<LoadingItem> = []
         var connectionStatus: MqttClientKit.State = .idle
         var mqttInfo: MqttClientKitInfo = .init(
-            address: "192.168.0.137", port: 1883, clientID: "")
+            address: "192.168.1.159", port: 1883, clientID: "")
         
         var userId: String = ""
         var connectedUsers: [String] = []
@@ -141,7 +141,6 @@ struct WebRTCMqttFeature {
 
     var body: some Reducer<State, Action> {
         Reduce { state, action in
-            logger.info("🟠 [WebRTCMqttFeature] Action: \(String(describing: action))")
             switch action {
             case .view(.onAppear):
                 logger.info(
@@ -274,7 +273,7 @@ struct WebRTCMqttFeature {
             case .view(.sendOffer(let to, let sdp)):
                 logger.info("🟠 [WebRTC] Sending offer to: \(to), sdp length: \(sdp.count)")
                 // Publish offer to MQTT topic
-                let offer = WebRTCOffer(sdp: sdp, type: "offer", from: state.userId, to: to)
+                let offer = WebRTCOffer(sdp: sdp, type: "offer", clientId: state.userId, videoSource: "")
                 return .run { send in
                     await send(._internal(.setLoading(.sendingOffer, true)))
                     do {
@@ -291,7 +290,7 @@ struct WebRTCMqttFeature {
 
             case .view(.sendAnswer(let to, let sdp)):
                 logger.info("🟠 [WebRTC] Sending answer to: \(to), sdp length: \(sdp.count)")
-                let answer = WebRTCAnswer(sdp: sdp, type: "answer", from: state.userId, to: to)
+                let answer = WebRTCAnswer(sdp: sdp, type: "answer", clientId: state.userId, videoSource: "")
                 return .run { send in
                     await send(._internal(.setLoading(.sendingAnswer, true)))
                     do {
@@ -310,9 +309,7 @@ struct WebRTCMqttFeature {
                 logger.info(
                     "🟠 [WebRTC] Sending ICE candidate to: \(to), candidate: \(candidate.prefix(20))..."
                 )
-                let iceCandidate = ICECandidate(
-                    candidate: candidate, sdpMLineIndex: sdpMLineIndex, sdpMid: sdpMid ?? "",
-                    from: state.userId, to: to)
+                let iceCandidate = ICECandidate(type: "ice", clientId: state.userId, candidate: .init(candidate: candidate, sdpMLineIndex: sdpMLineIndex, sdpMid: sdpMid))
                 return .run { send in
                     await send(._internal(.setLoading(.sendingIceCandidate, true)))
                     do {
@@ -384,8 +381,7 @@ struct WebRTCMqttFeature {
                             switch type {
                             case "offer":
                                 if let sdp = json["sdp"] as? String {
-                                    let offer = WebRTCOffer(
-                                        sdp: sdp, type: type, from: clientId, to: state.userId)
+                                    let offer = WebRTCOffer(sdp: sdp, type: type, clientId: clientId, videoSource: "")
                                     logger.info("🟠 [MQTT] Parsed offer message")
                                     if clientId == "self" {
                                         logger.info("Ignore \(clientId) message.")
@@ -395,8 +391,7 @@ struct WebRTCMqttFeature {
                                 }
                             case "answer":
                                 if let sdp = json["sdp"] as? String {
-                                    let answer = WebRTCAnswer(
-                                        sdp: sdp, type: type, from: clientId, to: state.userId)
+                                    let answer = WebRTCAnswer(sdp: sdp, type: type, clientId: clientId, videoSource: "")
                                     logger.info("🟠 [MQTT] Parsed answer message")
                                     if clientId == "self" {
                                         logger.info("Ignore \(clientId) message.")
@@ -410,9 +405,7 @@ struct WebRTCMqttFeature {
                                     let sdpMLineIndex = candidateObj["sdpMLineIndex"] as? Int
                                 {
                                     let sdpMid: String? = candidateObj["sdpMid"] as? String
-                                    let ice = ICECandidate(
-                                        candidate: candidate, sdpMLineIndex: sdpMLineIndex,
-                                        sdpMid: sdpMid!, from: clientId, to: state.userId)
+                                    let ice = ICECandidate(type: type, clientId: clientId, candidate: .init(candidate: candidate, sdpMLineIndex: sdpMLineIndex, sdpMid: sdpMid))
                                     logger.info("🟠 [MQTT] Parsed ICE message")
                                     if clientId == "self" {
                                         logger.info("Ignore \(clientId) message.")
@@ -446,7 +439,7 @@ struct WebRTCMqttFeature {
 
             case ._internal(.offerReceived(let offer)):
                 logger.info(
-                    "🟠 [WebRTC] Offer received: from=\(offer.from), to=\(offer.to), sdp length=\(offer.sdp.count)"
+                    "🟠 [WebRTC] Offer received: from=\(offer.clientId), sdp length=\(offer.sdp.count)"
                 )
                 state.pendingOffers.append(offer)
                 return .run { send in
@@ -463,7 +456,7 @@ struct WebRTCMqttFeature {
 
             case ._internal(.answerReceived(let answer)):
                 logger.info(
-                    "🟠 [WebRTC] Answer received: from=\(answer.from), to=\(answer.to), sdp length=\(answer.sdp.count)"
+                    "🟠 [WebRTC] Answer received: from=\(answer.clientId), sdp length=\(answer.sdp.count)"
                 )
                 state.pendingAnswers.append(answer)
                 return .run { send in
@@ -480,7 +473,7 @@ struct WebRTCMqttFeature {
 
             case ._internal(.iceCandidateReceived(let candidate)):
                 logger.info(
-                    "🟠 [WebRTC] ICE candidate received: from=\(candidate.from), to=\(candidate.to), candidate=\(candidate.candidate.prefix(20))..."
+                    "🟠 [WebRTC] ICE candidate received: from=\(candidate.clientId), candidate=\(candidate.candidate.candidate.prefix(20))..."
                 )
                 state.pendingIceCandidates.append(candidate)
                 return .run { send in
