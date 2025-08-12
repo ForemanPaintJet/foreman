@@ -34,19 +34,19 @@ struct DirectVideoCallFeature {
             
             var color: Color {
                 switch self {
-                case .none: return .clear
-                case .green: return .green
-                case .yellow: return .yellow
-                case .red: return .red
+                case .none: .clear
+                case .green: .green
+                case .yellow: .yellow
+                case .red: .red
                 }
             }
             
             var message: String {
                 switch self {
-                case .none: return ""
-                case .green: return "System Normal"
-                case .yellow: return "Warning Alert"
-                case .red: return "Critical Alert"
+                case .none: ""
+                case .green: "System Normal"
+                case .yellow: "Warning Alert"
+                case .red: "Critical Alert"
                 }
             }
         }
@@ -145,12 +145,20 @@ struct DirectVideoCallView: View {
                     .zIndex(1)
             }
             
-            // Main content area
             ZStack {
-                // Main video call view (fills background)
+                // Main content area
                 VideoCallView(webRTCClient: WebRTCClientLive.shared.getClient())
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .padding(.all, store.currentAlert == .none ? 0 : 20)
+                    .background(
+                        
+                        Color.black.shadow(.inner(
+                            color: store.currentAlert == .none ?
+                                .black.opacity(0.4) :
+                                store.currentAlert.color,
+                            radius: store.currentAlert == .none ? 8 : 30
+                        ))
+                        
                     )
                     .animation(.easeInOut(duration: 0.5), value: store.currentAlert)
 
@@ -315,10 +323,10 @@ struct DirectVideoCallView: View {
     
     private func wifiSignalColor(for signalStrength: Int) -> Color {
         switch signalStrength {
-        case -30...0: return .green // Excellent
-        case -50...(-31): return .blue // Good
-        case -70...(-51): return .orange // Fair
-        default: return .red // Poor
+        case -30...0: .green // Excellent
+        case -50...(-31): .blue // Good
+        case -70...(-51): .orange // Fair
+        default: .red // Poor
         }
     }
 
@@ -575,10 +583,10 @@ struct DirectVideoCallView: View {
     
     private func qualityColor(for quality: Double) -> Color {
         switch quality {
-        case 0.8...1.0: return .green
-        case 0.6..<0.8: return .blue
-        case 0.4..<0.6: return .orange
-        default: return .red
+        case 0.8...1.0: .green
+        case 0.6..<0.8: .blue
+        case 0.4..<0.6: .orange
+        default: .red
         }
     }
     
@@ -649,20 +657,20 @@ struct SupportedPoseRow: View {
     
     private var categoryColor: Color {
         switch pose.category {
-        case "Basic": return .blue
-        case "Movement": return .green
-        case "Gesture": return .orange
-        case "Exercise": return .purple
-        default: return .gray
+        case "Basic": .blue
+        case "Movement": .green
+        case "Gesture": .orange
+        case "Exercise": .purple
+        default: .gray
         }
     }
     
     private var confidenceColor: Color {
         switch pose.confidence {
-        case 90...100: return .green
-        case 80...89: return .blue
-        case 70...79: return .orange
-        default: return .red
+        case 90...100: .green
+        case 80...89: .blue
+        case 70...79: .orange
+        default: .red
         }
     }
 }
@@ -713,7 +721,6 @@ struct MaskBorderAnimation1: View {
                     RoundedRectangle(cornerRadius: 20)
                         .stroke(.white, lineWidth: 5)
                         .frame(width: 200, height: 200)
-                        
                 }
                 .animation(.linear(duration: 2).repeatForever(autoreverses: false), value: angle)
         }
@@ -722,7 +729,6 @@ struct MaskBorderAnimation1: View {
         }
     }
 }
-
 
 #Preview("Mask Test") {
     MaskBorderAnimation1()
