@@ -6,25 +6,25 @@
 //
 
 import ComposableArchitecture
-import SwiftUI
 import ForemanThemeCore
+import SwiftUI
 
 struct WebRTCSocketView: View {
     @Bindable var store: StoreOf<WebRTCSocketFeature>
     @Dependency(\.themeService) var themeService
-    
+
     // Orange theme configuration
     private var themeConfig: ThemeConfiguration<DynamicTheme> {
         themeService.themeConfiguration(for: .orange, variant: .vibrant)
     }
-    
+
     var body: some View {
         NavigationStack {
             ZStack {
                 // Orange themed background
                 themeConfig.colorTheme.background
                     .ignoresSafeArea()
-                
+
                 ScrollView {
                     LazyVStack(spacing: 20) {
                         connectionSection
@@ -36,7 +36,7 @@ struct WebRTCSocketView: View {
                     }
                     .padding()
                 }
-                
+
                 if store.isJoinedToRoom {
                     // Video Viewer View
                     VideoCallViewWrapper(store: store)
@@ -45,8 +45,8 @@ struct WebRTCSocketView: View {
             .navigationTitle("WebRTC Socket")
             .navigationBarTitleDisplayMode(.large)
         }
-        .frame(maxWidth: 1000, maxHeight: 800) // Limit the view size instead of taking whole screen
-        .clipShape(RoundedRectangle(cornerRadius: 12)) // Add rounded corners for better visual containment
+        .frame(maxWidth: 1000, maxHeight: 800)  // Limit the view size instead of taking whole screen
+        .clipShape(RoundedRectangle(cornerRadius: 12))  // Add rounded corners for better visual containment
         .alert($store.scope(state: \.alert, action: \.alert))
         .onAppear {
             store.send(.view(.onAppear))
@@ -117,7 +117,8 @@ struct WebRTCSocketView: View {
                         title: "Connect & Join Room",
                         icon: "network",
                         color: themeConfig.colorTheme.goldenColor,
-                        isExecuting: store.loadingItems.contains(.connecting) || store.loadingItems.contains(.joiningRoom),
+                        isExecuting: store.loadingItems.contains(.connecting)
+                            || store.loadingItems.contains(.joiningRoom),
                         isEnabled: store.canConnect
                     ) {
                         store.send(.view(.connectToServer))
@@ -514,7 +515,10 @@ struct UserRow: View {
         .padding(.horizontal, 12)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(isCurrentUser ? themeConfig.colorTheme.primary.opacity(0.05) : themeConfig.colorTheme.lightColor.opacity(0.5))
+                .fill(
+                    isCurrentUser
+                        ? themeConfig.colorTheme.primary.opacity(0.05)
+                        : themeConfig.colorTheme.lightColor.opacity(0.5))
         )
     }
 }
@@ -593,7 +597,8 @@ struct InfoRow: View {
 
 extension WebRTCSocketFeature.State {
     var canConnect: Bool {
-        !serverURL.isEmpty && !roomId.isEmpty && !userId.isEmpty && connectionStatus == .disconnected
+        !serverURL.isEmpty && !roomId.isEmpty && !userId.isEmpty
+            && connectionStatus == .disconnected
             && !loadingItems.contains(.connecting) && !loadingItems.contains(.joiningRoom)
     }
 
@@ -624,9 +629,12 @@ struct VideoCallViewWrapper: View {
     var body: some View {
         VStack {
             if store.isJoinedToRoom {
-                DirectVideoCallView(store: .init(initialState: DirectVideoCallFeature.State(), reducer: {
-                    DirectVideoCallFeature()
-                }))
+                DirectVideoCallView(
+                    store: .init(
+                        initialState: DirectVideoCallFeature.State(),
+                        reducer: {
+                            DirectVideoCallFeature()
+                        }))
             } else {
                 VStack(spacing: 20) {
                     ProgressView()

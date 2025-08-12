@@ -8,6 +8,7 @@
 import Combine
 import ComposableArchitecture
 import Foundation
+import OSLog
 import SwiftUI
 
 // MARK: - Socket Models
@@ -84,6 +85,7 @@ class SocketClient: ObservableObject {
 
     private var urlSessionWebSocketTask: URLSessionWebSocketTask?
     private var currentUserId: String?
+    private let logger = Logger(subsystem: "foreman", category: "SocketClient")
 
     // Publishers for different message types
     let messageSubject = PassthroughSubject<SocketMessage, Never>()
@@ -94,11 +96,11 @@ class SocketClient: ObservableObject {
 
     func connect(to url: URL) async {
         guard urlSessionWebSocketTask == nil else {
-            print("🔌 SocketClient: Already connected or connecting")
+            logger.info("🔌 SocketClient: Already connected or connecting")
             return
         }
 
-        print("🔌 SocketClient: Starting connection to \(url)")
+        logger.info("🔌 SocketClient: Starting connection to \(url)")
         connectionStatus = .connecting
         lastError = nil
 
@@ -107,41 +109,41 @@ class SocketClient: ObservableObject {
         components?.scheme = url.scheme == "https" ? "wss" : "ws"
 
         guard let socketURL = components?.url else {
-            print("❌ SocketClient: Invalid URL - \(url)")
+            logger.error("❌ SocketClient: Invalid URL - \(url)")
             connectionStatus = .error
             lastError = "Invalid URL"
             return
         }
 
-        print("🔗 SocketClient: Connecting to WebSocket URL: \(socketURL)")
+        logger.info("🔗 SocketClient: Connecting to WebSocket URL: \(socketURL)")
         let session = URLSession(configuration: .default)
         urlSessionWebSocketTask = session.webSocketTask(with: socketURL)
 
         urlSessionWebSocketTask?.resume()
-        print("🔌 SocketClient: WebSocket task started, waiting for server confirmation")
+        logger.info("🔌 SocketClient: WebSocket task started, waiting for server confirmation")
 
         // Start listening for messages - connection status will be updated when we receive 'connected' event
         await listenForMessages()
     }
 
     func disconnect() async {
-        print("🔌 SocketClient: Disconnecting from socket")
+        logger.info("🔌 SocketClient: Disconnecting from socket")
         urlSessionWebSocketTask?.cancel()
         urlSessionWebSocketTask = nil
         connectionStatus = .disconnected
         currentUserId = nil
         currentRoom = nil
         connectedUsers = []
-        print("✅ SocketClient: Successfully disconnected")
+        logger.info("✅ SocketClient: Successfully disconnected")
     }
 
     func send(event: String, data: [String: Any]?) async throws {
         guard let task = urlSessionWebSocketTask else {
-            print("❌ SocketClient: Cannot send '\(event)' - not connected")
+            logger.error("❌ SocketClient: Cannot send '\(event)' - not connected")
             throw SocketError.notConnected
         }
 
-        print("📤 SocketClient: Sending event '\(event)' with data: \(data ?? [:])")
+        logger.info("📤 SocketClient: Sending event '\(event)' with data: \(data ?? [:])")
 
         // Format as flat WebSocket JSON message: {"type": "event", "room": "...", "user_id": "..."}
         var webSocketMessage: [String: Any] = ["type": event]
@@ -157,33 +159,33 @@ class SocketClient: ObservableObject {
             let jsonData = try JSONSerialization.data(withJSONObject: webSocketMessage, options: [])
             let jsonString = String(data: jsonData, encoding: .utf8) ?? "{}"
 
-            print("📤 SocketClient: Sending WebSocket message: \(jsonString)")
+            logger.info("📤 SocketClient: Sending WebSocket message: \(jsonString)")
             try await task.send(.string(jsonString))
-            print("✅ SocketClient: Successfully sent event '\(event)'")
+            logger.info("✅ SocketClient: Successfully sent event '\(event)'")
         } catch {
-            print("❌ SocketClient: Failed to serialize JSON for event '\(event)': \(error)")
+            logger.error("❌ SocketClient: Failed to serialize JSON for event '\(event)': \(error)")
             throw error
         }
     }
 
     func joinRoom(roomId: String, userId: String) async throws {
-        print("🏠 SocketClient: Joining room '\(roomId)' as user '\(userId)'")
+        logger.info("🏠 SocketClient: Joining room '\(roomId)' as user '\(userId)'")
         currentRoom = roomId
         currentUserId = userId
         try await send(event: "join_room", data: ["room": roomId, "user_id": userId])
-        print("✅ SocketClient: Successfully sent join room request")
+        logger.info("✅ SocketClient: Successfully sent join room request")
     }
 
     func leaveRoom(roomId: String) async throws {
-        print("🏠 SocketClient: Leaving room '\(roomId)'")
+        logger.info("🏠 SocketClient: Leaving room '\(roomId)'")
         try await send(event: "leave_room", data: ["room": roomId])
         currentRoom = nil
         connectedUsers = []
-        print("✅ SocketClient: Successfully left room")
+        logger.info("✅ SocketClient: Successfully left room")
     }
 
     func sendOffer(_ offer: WebRTCOffer) async throws {
-        print("📞 SocketClient: Sending WebRTC offer to '\(offer.clientId)'")
+        logger.info("📞 SocketClient: Sending WebRTC offer to '\(offer.clientId)'")
 
         // Format to match server's expected structure: {"from_user": "...", "to_user": "...", "offer": {...}}
         let offerData: [String: Any] = [
@@ -198,11 +200,11 @@ class SocketClient: ObservableObject {
         ]
 
         try await send(event: "offer", data: data)
-        print("✅ SocketClient: Successfully sent offer with nested format")
+        logger.info("✅ SocketClient: Successfully sent offer with nested format")
     }
 
     func sendAnswer(_ answer: WebRTCAnswer) async throws {
-        print("📞 SocketClient: Sending WebRTC answer to '\(answer.clientId)'")
+        logger.info("📞 SocketClient: Sending WebRTC answer to '\(answer.clientId)'")
 
         // Format to match server's expected structure: {"from_user": "...", "to_user": "...", "answer": {...}}
         let answerData: [String: Any] = [
@@ -217,11 +219,11 @@ class SocketClient: ObservableObject {
         ]
 
         try await send(event: "answer", data: data)
-        print("✅ SocketClient: Successfully sent answer with nested format")
+        logger.info("✅ SocketClient: Successfully sent answer with nested format")
     }
 
     func sendICECandidate(_ candidate: ICECandidate) async throws {
-        print("🧊 SocketClient: Sending ICE candidate to '\(candidate.clientId)'")
+        logger.info("🧊 SocketClient: Sending ICE candidate to '\(candidate.clientId)'")
 
         // Format to match server's expected structure: {"from_user": "...", "to_user": "...", "candidate": {...}}
         let candidateData: [String: Any] = [
@@ -237,7 +239,7 @@ class SocketClient: ObservableObject {
         ]
 
         try await send(event: "ice_candidate", data: data)
-        print("✅ SocketClient: Successfully sent ICE candidate with nested format")
+        logger.info("✅ SocketClient: Successfully sent ICE candidate with nested format")
     }
 
     private func listenForMessages() async {
@@ -249,7 +251,7 @@ class SocketClient: ObservableObject {
                 await handleMessage(message)
             }
         } catch {
-            print("❌ SocketClient: Connection error - \(error.localizedDescription)")
+            logger.error("❌ SocketClient: Connection error - \(error.localizedDescription)")
             connectionStatus = .error
             lastError = error.localizedDescription
         }
@@ -271,13 +273,13 @@ class SocketClient: ObservableObject {
     private func parseWebSocketMessage(_ text: String) async {
         // Parse WebSocket JSON message format
         guard let data = text.data(using: .utf8) else {
-            print("❌ SocketClient: Failed to convert message to data")
+            logger.error("❌ SocketClient: Failed to convert message to data")
             return
         }
 
         do {
             if let messageObject = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                print("📨 SocketClient: Raw WebSocket message: \(messageObject)")
+                logger.info("📨 SocketClient: Raw WebSocket message: \(messageObject)")
 
                 // Try to detect message type from the structure
                 var event: String?
@@ -316,22 +318,23 @@ class SocketClient: ObservableObject {
                 }
 
                 guard let detectedEvent = event else {
-                    print("❌ SocketClient: Could not determine message type from: \(messageObject)")
+                    logger.error(
+                        "❌ SocketClient: Could not determine message type from: \(messageObject)")
                     return
                 }
 
-                print("📨 SocketClient: Detected event type: '\(detectedEvent)'")
+                logger.info("📨 SocketClient: Detected event type: '\(detectedEvent)'")
                 await handleSocketEvent(event: detectedEvent, data: eventData)
             } else {
-                print("❌ SocketClient: Invalid WebSocket message format: \(text)")
+                logger.error("❌ SocketClient: Invalid WebSocket message format: \(text)")
             }
         } catch {
-            print("❌ SocketClient: Failed to parse WebSocket message - \(error)")
+            logger.error("❌ SocketClient: Failed to parse WebSocket message - \(error)")
         }
     }
 
     private func handleSocketEvent(event: String, data: [String: Any]) async {
-        print("📨 SocketClient: Received socket event '\(event)' with raw data: \(data)")
+        logger.info("📨 SocketClient: Received socket event '\(event)' with raw data: \(data)")
 
         let stringData = data.compactMapValues { value in
             if let string = value as? String {
@@ -349,16 +352,17 @@ class SocketClient: ObservableObject {
         switch event {
         case "connected":
             // Handle server connection confirmation
-            print("🔗 SocketClient: Server confirmed connection - updating status to connected")
+            logger.info(
+                "🔗 SocketClient: Server confirmed connection - updating status to connected")
             connectionStatus = .connected
             if let userId = data["user_id"] as? String {
-                print("🔗 SocketClient: Server assigned user ID: \(userId)")
+                logger.info("🔗 SocketClient: Server assigned user ID: \(userId)")
                 // Optionally update our current user ID if server assigned one
                 // currentUserId = userId
             } else {
-                print("🔗 SocketClient: Server confirmed connection")
+                logger.info("🔗 SocketClient: Server confirmed connection")
             }
-            
+
         case "offer":
             // Handle server's offer format: {"from_user": "...", "offer": {"sdp": "...", "type": "offer"}}
             if let fromUser = data["from_user"] as? String,
@@ -366,8 +370,9 @@ class SocketClient: ObservableObject {
                 let sdp = offerData["sdp"] as? String,
                 let type = offerData["type"] as? String
             {
-                print("📞 SocketClient: Received WebRTC offer from '\(fromUser)'")
-                let offer = WebRTCOffer(sdp: sdp, type: "offer", clientId: fromUser, videoSource: "")
+                logger.info("📞 SocketClient: Received WebRTC offer from '\(fromUser)'")
+                let offer = WebRTCOffer(
+                    sdp: sdp, type: "offer", clientId: fromUser, videoSource: "")
                 offerSubject.send(offer)
             }
             // Fallback to original format
@@ -376,7 +381,7 @@ class SocketClient: ObservableObject {
                 let from = data["from"] as? String,
                 let to = data["to"] as? String
             {
-                print("📞 SocketClient: Received WebRTC offer from '\(from)' to '\(to)'")
+                logger.info("📞 SocketClient: Received WebRTC offer from '\(from)' to '\(to)'")
                 let offer = WebRTCOffer(sdp: sdp, type: "offer", clientId: from, videoSource: "")
                 offerSubject.send(offer)
             }
@@ -388,8 +393,9 @@ class SocketClient: ObservableObject {
                 let sdp = answerData["sdp"] as? String,
                 let type = answerData["type"] as? String
             {
-                print("📞 SocketClient: Received WebRTC answer from '\(fromUser)'")
-                let answer = WebRTCAnswer(sdp: sdp, type: "answer", clientId: fromUser, videoSource: "")
+                logger.info("📞 SocketClient: Received WebRTC answer from '\(fromUser)'")
+                let answer = WebRTCAnswer(
+                    sdp: sdp, type: "answer", clientId: fromUser, videoSource: "")
                 answerSubject.send(answer)
             }
             // Fallback to original format
@@ -398,19 +404,19 @@ class SocketClient: ObservableObject {
                 let from = data["from"] as? String,
                 let to = data["to"] as? String
             {
-                print("📞 SocketClient: Received WebRTC answer from '\(from)' to '\(to)'")
+                logger.info("📞 SocketClient: Received WebRTC answer from '\(from)' to '\(to)'")
                 let answer = WebRTCAnswer(sdp: sdp, type: "answer", clientId: from, videoSource: "")
                 answerSubject.send(answer)
             }
 
-        case "ice   ":
+        case "ice_candidate":
             // Handle server's ICE candidate format: {"from_user": "...", "candidate": {...}}
             if let fromUser = data["from_user"] as? String,
                 let candidateData = data["candidate"] as? [String: Any],
                 let candidate = candidateData["candidate"] as? String,
                 let sdpMLineIndex = candidateData["sdpMLineIndex"] as? Int
             {
-                print("🧊 SocketClient: Received ICE candidate from '\(fromUser)'")
+                logger.info("🧊 SocketClient: Received ICE candidate from '\(fromUser)'")
 
                 // Handle sdpMid as either string or integer
                 var sdpMid: String?
@@ -419,11 +425,14 @@ class SocketClient: ObservableObject {
                 } else if let sdpMidInt = candidateData["sdpMid"] as? Int {
                     sdpMid = String(sdpMidInt)
                 }
-                
-                let iceCandidate = ICECandidate(type: "ice", clientId: fromUser, candidate: .init(candidate: candidate, sdpMLineIndex: sdpMLineIndex, sdpMid: sdpMid))
-                
+
+                let iceCandidate = ICECandidate(
+                    type: "ice", clientId: fromUser,
+                    candidate: .init(
+                        candidate: candidate, sdpMLineIndex: sdpMLineIndex, sdpMid: sdpMid))
+
                 iceCandidateSubject.send(iceCandidate)
-                print(
+                logger.info(
                     "✅ SocketClient: Successfully parsed ICE candidate with sdpMid: \(sdpMid ?? "nil")"
                 )
             }
@@ -433,12 +442,15 @@ class SocketClient: ObservableObject {
                 let from = data["from"] as? String,
                 let to = data["to"] as? String
             {
-                print("🧊 SocketClient: Received ICE candidate from '\(from)' to '\(to)'")
-                let iceCandidate = ICECandidate(type: "ice", clientId: from, candidate: .init(candidate: candidate, sdpMLineIndex: sdpMLineIndex, sdpMid: ""))
-                
+                logger.info("🧊 SocketClient: Received ICE candidate from '\(from)' to '\(to)'")
+                let iceCandidate = ICECandidate(
+                    type: "ice", clientId: from,
+                    candidate: .init(candidate: candidate, sdpMLineIndex: sdpMLineIndex, sdpMid: "")
+                )
+
                 iceCandidateSubject.send(iceCandidate)
             } else {
-                print("❌ SocketClient: Invalid ICE candidate format: \(data)")
+                logger.error("❌ SocketClient: Invalid ICE candidate format: \(data)")
             }
 
         case "room_update", "user_joined", "user_left", "room_joined":
@@ -463,18 +475,18 @@ class SocketClient: ObservableObject {
             }
 
             if let roomId = roomId {
-                print(
+                logger.info(
                     "🏠 SocketClient: Room event '\(event)' for '\(roomId)' - \(userCount) users: \(usersList)"
                 )
                 let roomInfo = RoomInfo(roomId: roomId, userCount: userCount, users: usersList)
                 connectedUsers = usersList
                 roomUpdateSubject.send(roomInfo)
             } else {
-                print("❌ SocketClient: Invalid room event format: \(data)")
+                logger.error("❌ SocketClient: Invalid room event format: \(data)")
             }
 
         default:
-            print("❓ SocketClient: Unhandled socket event: '\(event)' with data: \(data)")
+            logger.warning("❓ SocketClient: Unhandled socket event: '\(event)' with data: \(data)")
         }
     }
 }

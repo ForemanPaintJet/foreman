@@ -7,6 +7,7 @@
 
 import Charts
 import ComposableArchitecture
+import OSLog
 import SwiftUI
 
 @Reducer
@@ -18,20 +19,20 @@ struct DirectVideoCallFeature {
         var showWifiDetails: Bool = false
         var distanceFt: Double = 10.0
         var batteryLevel: Int = 100
-        var wifiSignalStrength: Int = -45 // dBm
-        var connectionQuality: Double = 0.85 // 0-1
-        var networkSpeed: Double = 150.5 // Mbps
-        var latency: Int = 12 // ms
-        
+        var wifiSignalStrength: Int = -45  // dBm
+        var connectionQuality: Double = 0.85  // 0-1
+        var networkSpeed: Double = 150.5  // Mbps
+        var latency: Int = 12  // ms
+
         // Alert system
         var currentAlert: AlertType = .none
-        
+
         enum AlertType: String, CaseIterable, Equatable {
             case none = "None"
             case green = "Green"
             case yellow = "Yellow"
             case red = "Red"
-            
+
             var color: Color {
                 switch self {
                 case .none: .clear
@@ -40,7 +41,7 @@ struct DirectVideoCallFeature {
                 case .red: .red
                 }
             }
-            
+
             var message: String {
                 switch self {
                 case .none: ""
@@ -130,6 +131,7 @@ struct DirectVideoCallFeature {
 
 struct DirectVideoCallView: View {
     let store: StoreOf<DirectVideoCallFeature>
+    private let logger = Logger(subsystem: "foreman", category: "DirectVideoCallView")
 
     @Dependency(\.webRTCClient) var webRTCClientDependency
 
@@ -138,27 +140,29 @@ struct DirectVideoCallView: View {
             // WiFi Details at the top (always visible when expanded)
             if store.showWifiDetails {
                 WifiDetailsView(store: store)
-                    .transition(.asymmetric(
-                        insertion: .opacity.combined(with: .move(edge: .top)),
-                        removal: .opacity.combined(with: .move(edge: .top))
-                    ))
+                    .transition(
+                        .asymmetric(
+                            insertion: .opacity.combined(with: .move(edge: .top)),
+                            removal: .opacity.combined(with: .move(edge: .top))
+                        )
+                    )
                     .zIndex(1)
             }
-            
+
             ZStack {
                 // Main content area
                 VideoCallView(webRTCClient: WebRTCClientLive.shared.getClient())
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                     .padding(.all, store.currentAlert == .none ? 0 : 20)
                     .background(
-                        
-                        Color.black.shadow(.inner(
-                            color: store.currentAlert == .none ?
-                                .black.opacity(0.4) :
-                                store.currentAlert.color,
-                            radius: store.currentAlert == .none ? 8 : 30
-                        ))
-                        
+
+                        Color.black.shadow(
+                            .inner(
+                                color: store.currentAlert == .none
+                                    ? .black.opacity(0.4) : store.currentAlert.color,
+                                radius: store.currentAlert == .none ? 8 : 30
+                            ))
+
                     )
                     .animation(.easeInOut(duration: 0.5), value: store.currentAlert)
 
@@ -174,31 +178,33 @@ struct DirectVideoCallView: View {
                                 .foregroundColor(.blue)
                                 .padding(8)
                         }
-                        .sheet(isPresented: .init(
-                            get: { store.showConfig },
-                            set: { store.send(.view(.showConfig($0))) }
-                        )) {
+                        .sheet(
+                            isPresented: .init(
+                                get: { store.showConfig },
+                                set: { store.send(.view(.showConfig($0))) }
+                            )
+                        ) {
                             ConfigPopupView(store: store)
                         }
-                        
+
                         // Alert simulation buttons
                         AlertSimulationView(store: store)
                     }
                 }
-                
+
                 cornerOverlay(position: .topTrailing) {
                     HStack(spacing: 12) {
                         WifiSignalView(store: store)
                         HumanPoseButton(store: store)
                     }
                 }
-                
+
                 cornerOverlay(position: .bottomLeading) {
                     RulerDistanceView(distance: store.distanceFt) {
                         store.send(.view(.updateDistanceRandom))
                     }
                 }
-                
+
                 cornerOverlay(position: .bottomTrailing) {
                     BatteryIconView()
                 }
@@ -207,11 +213,15 @@ struct DirectVideoCallView: View {
         }
         .onAppear {
             store.send(.view(.onAppear))
-            print("🎥 DirectVideoCallView: Video viewer started with WebRTC client")
+            logger.info("🎥 DirectVideoCallView: Video viewer started with WebRTC client")
             let client = WebRTCClientLive.shared.getClient()
-            print("🎥 DirectVideoCallView: Current video tracks count: \(client.remoteVideoTracks.count)")
+            logger.info(
+                "🎥 DirectVideoCallView: Current video tracks count: \(client.remoteVideoTracks.count)"
+            )
             for (index, track) in client.remoteVideoTracks.enumerated() {
-                print("🎥 Track \(index): User \(track.userId), Enabled: \(track.track?.isEnabled ?? false)")
+                logger.info(
+                    "🎥 Track \(index): User \(track.userId), Enabled: \(track.track?.isEnabled ?? false)"
+                )
             }
         }
     }
@@ -248,13 +258,18 @@ struct DirectVideoCallView: View {
                 Circle()
                     .fill(Color.purple)
                     .frame(width: markerSize, height: markerSize)
-                    .offset(x: CGFloat((distance - minFt) / (maxFt - minFt)) * (rulerWidth - markerSize))
+                    .offset(
+                        x: CGFloat((distance - minFt) / (maxFt - minFt)) * (rulerWidth - markerSize)
+                    )
                     .shadow(radius: 2)
                 // Value label above marker
                 Text(String(format: "%.1f ft", distance))
                     .font(.caption2)
                     .foregroundColor(.purple)
-                    .offset(x: CGFloat((distance - minFt) / (maxFt - minFt)) * (rulerWidth - markerSize) - 10, y: -22)
+                    .offset(
+                        x: CGFloat((distance - minFt) / (maxFt - minFt)) * (rulerWidth - markerSize)
+                            - 10,
+                        y: -22)
             }
             .frame(width: rulerWidth, height: 32)
             Button(action: onUpdate) {
@@ -290,7 +305,7 @@ struct DirectVideoCallView: View {
     @ViewBuilder
     func cornerButton(label: String) -> some View {
         Button(action: {
-            print("Button tapped at \(label)")
+            logger.info("Button tapped at \(label)")
         }) {
             Text(label)
                 .font(.caption)
@@ -320,13 +335,13 @@ struct DirectVideoCallView: View {
         }
         .padding(8)
     }
-    
+
     private func wifiSignalColor(for signalStrength: Int) -> Color {
         switch signalStrength {
-        case -30...0: .green // Excellent
-        case -50...(-31): .blue // Good
-        case -70...(-51): .orange // Fair
-        default: .red // Poor
+        case -30...0: .green  // Excellent
+        case -50...(-31): .blue  // Good
+        case -70...(-51): .orange  // Fair
+        default: .red  // Poor
         }
     }
 
@@ -334,7 +349,7 @@ struct DirectVideoCallView: View {
     func BatteryIconView() -> some View {
         AnimatedBatteryView(bLevel: store.batteryLevel, isCharging: false)
     }
-    
+
     @ViewBuilder
     func HumanPoseButton(store: StoreOf<DirectVideoCallFeature>) -> some View {
         Button(action: {
@@ -346,14 +361,16 @@ struct DirectVideoCallView: View {
                 .foregroundColor(.orange)
                 .padding(8)
         }
-        .popover(isPresented: .init(
-            get: { store.showHumanPose },
-            set: { store.send(.view(.showHumanPose($0))) }
-        )) {
+        .popover(
+            isPresented: .init(
+                get: { store.showHumanPose },
+                set: { store.send(.view(.showHumanPose($0))) }
+            )
+        ) {
             HumanPosePopoverView(store: store)
         }
     }
-    
+
     @ViewBuilder
     func HumanPosePopoverView(store: StoreOf<DirectVideoCallFeature>) -> some View {
         VStack(spacing: 0) {
@@ -373,9 +390,9 @@ struct DirectVideoCallView: View {
                 .foregroundColor(.blue)
             }
             .padding()
-            
+
             Divider()
-            
+
             // Supported Poses List
             List(supportedPoses, id: \.name) { pose in
                 SupportedPoseRow(pose: pose)
@@ -385,24 +402,40 @@ struct DirectVideoCallView: View {
         }
         .frame(width: 320, height: 400)
     }
-    
+
     private var supportedPoses: [SupportedPose] {
         [
-            SupportedPose(name: "Standing", icon: "figure.stand", category: "Basic", confidence: 95),
-            SupportedPose(name: "Walking", icon: "figure.walk", category: "Movement", confidence: 92),
-            SupportedPose(name: "Running", icon: "figure.run", category: "Movement", confidence: 88),
-            SupportedPose(name: "Sitting", icon: "figure.seated.side", category: "Basic", confidence: 94),
-            SupportedPose(name: "Raising Hand", icon: "hand.raised", category: "Gesture", confidence: 85),
-            SupportedPose(name: "Arms Crossed", icon: "figure.arms.open", category: "Gesture", confidence: 80),
+            SupportedPose(
+                name: "Standing", icon: "figure.stand", category: "Basic", confidence: 95),
+            SupportedPose(
+                name: "Walking", icon: "figure.walk", category: "Movement", confidence: 92),
+            SupportedPose(
+                name: "Running", icon: "figure.run", category: "Movement", confidence: 88),
+            SupportedPose(
+                name: "Sitting", icon: "figure.seated.side", category: "Basic", confidence: 94),
+            SupportedPose(
+                name: "Raising Hand", icon: "hand.raised", category: "Gesture", confidence: 85),
+            SupportedPose(
+                name: "Arms Crossed", icon: "figure.arms.open", category: "Gesture", confidence: 80),
             SupportedPose(name: "Waving", icon: "hand.wave", category: "Gesture", confidence: 78),
-            SupportedPose(name: "Squatting", icon: "figure.strengthtraining.traditional", category: "Exercise", confidence: 82),
-            SupportedPose(name: "Push-up Position", icon: "figure.core.training", category: "Exercise", confidence: 86),
-            SupportedPose(name: "Yoga Pose", icon: "figure.mind.and.body", category: "Exercise", confidence: 75),
-            SupportedPose(name: "Jumping", icon: "figure.jumprope", category: "Movement", confidence: 70),
-            SupportedPose(name: "Dancing", icon: "figure.dance", category: "Movement", confidence: 68)
+            SupportedPose(
+                name: "Squatting", icon: "figure.strengthtraining.traditional",
+                category: "Exercise",
+                confidence: 82),
+            SupportedPose(
+                name: "Push-up Position", icon: "figure.core.training", category: "Exercise",
+                confidence: 86
+            ),
+            SupportedPose(
+                name: "Yoga Pose", icon: "figure.mind.and.body", category: "Exercise",
+                confidence: 75),
+            SupportedPose(
+                name: "Jumping", icon: "figure.jumprope", category: "Movement", confidence: 70),
+            SupportedPose(
+                name: "Dancing", icon: "figure.dance", category: "Movement", confidence: 68),
         ]
     }
-    
+
     @ViewBuilder
     func AlertSimulationView(store: StoreOf<DirectVideoCallFeature>) -> some View {
         VStack(spacing: 4) {
@@ -413,8 +446,11 @@ struct DirectVideoCallView: View {
                         .fill(store.currentAlert.color)
                         .frame(width: 8, height: 8)
                         .scaleEffect(1.0 + (store.currentAlert == .red ? 0.3 : 0.1))
-                        .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: store.currentAlert)
-                    
+                        .animation(
+                            .easeInOut(duration: 1.0).repeatForever(autoreverses: true),
+                            value: store.currentAlert
+                        )
+
                     Text(store.currentAlert.message)
                         .font(.caption2)
                         .fontWeight(.medium)
@@ -425,7 +461,7 @@ struct DirectVideoCallView: View {
                 .padding(6)
                 .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
             }
-            
+
             // Alert simulation buttons
             VStack(spacing: 4) {
                 ForEach(DirectVideoCallFeature.State.AlertType.allCases, id: \.self) { alertType in
@@ -436,7 +472,7 @@ struct DirectVideoCallView: View {
                             Circle()
                                 .fill(alertType.color)
                                 .frame(width: 12, height: 12)
-                            
+
                             Text(alertType.rawValue)
                                 .font(.caption2)
                                 .fontWeight(.medium)
@@ -445,9 +481,9 @@ struct DirectVideoCallView: View {
                         .padding(.vertical, 4)
                         .background(
                             RoundedRectangle(cornerRadius: 6)
-                                .fill(alertType == store.currentAlert ?
-                                    alertType.color.opacity(0.2) :
-                                    Color.black.opacity(0.1))
+                                .fill(
+                                    alertType == store.currentAlert
+                                        ? alertType.color.opacity(0.2) : Color.black.opacity(0.1))
                         )
                         .foregroundColor(alertType == .none ? .primary : alertType.color)
                     }
@@ -458,7 +494,7 @@ struct DirectVideoCallView: View {
             .shadow(radius: 2)
         }
     }
-    
+
     @ViewBuilder
     func WifiDetailsView(store: StoreOf<DirectVideoCallFeature>) -> some View {
         HStack(spacing: 16) {
@@ -468,7 +504,7 @@ struct DirectVideoCallView: View {
                     .font(.caption)
                     .fontWeight(.medium)
                     .foregroundColor(.blue)
-                
+
                 Chart(signalHistory, id: \.time) { data in
                     LineMark(
                         x: .value("Time", data.time),
@@ -476,7 +512,7 @@ struct DirectVideoCallView: View {
                     )
                     .foregroundStyle(.blue)
                     .lineStyle(StrokeStyle(lineWidth: 2))
-                    
+
                     AreaMark(
                         x: .value("Time", data.time),
                         y: .value("Signal", data.signal)
@@ -488,17 +524,17 @@ struct DirectVideoCallView: View {
                 .chartXAxis(.hidden)
                 .chartYAxis(.hidden)
             }
-            
+
             Divider()
                 .frame(height: 50)
-            
+
             // Connection Quality Gauge
             VStack(spacing: 4) {
                 Text("Quality")
                     .font(.caption)
                     .fontWeight(.medium)
                     .foregroundColor(.secondary)
-                
+
                 Gauge(value: store.connectionQuality, in: 0...1) {
                     EmptyView()
                 } currentValueLabel: {
@@ -510,10 +546,10 @@ struct DirectVideoCallView: View {
                 .tint(qualityColor(for: store.connectionQuality))
                 .frame(width: 50, height: 50)
             }
-            
+
             Divider()
                 .frame(height: 50)
-            
+
             // Network Stats
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
@@ -527,7 +563,7 @@ struct DirectVideoCallView: View {
                         .font(.caption2)
                         .foregroundColor(.secondary)
                 }
-                
+
                 HStack(spacing: 6) {
                     Image(systemName: "timer")
                         .foregroundColor(.orange)
@@ -540,17 +576,17 @@ struct DirectVideoCallView: View {
                         .foregroundColor(.secondary)
                 }
             }
-            
+
             Divider()
                 .frame(height: 50)
-            
+
             // Network Speed Chart
             VStack(alignment: .leading, spacing: 6) {
                 Text("Network Speed")
                     .font(.caption)
                     .fontWeight(.medium)
                     .foregroundColor(.green)
-                
+
                 Chart(speedHistory, id: \.time) { data in
                     BarMark(
                         x: .value("Time", data.time),
@@ -563,9 +599,9 @@ struct DirectVideoCallView: View {
                 .chartXAxis(.hidden)
                 .chartYAxis(.hidden)
             }
-            
+
             Spacer()
-            
+
             // Close button
             Button(action: {
                 store.send(.view(.toggleWifiDetails))
@@ -580,7 +616,7 @@ struct DirectVideoCallView: View {
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
         .shadow(color: .black.opacity(0.1), radius: 4, y: 2)
     }
-    
+
     private func qualityColor(for quality: Double) -> Color {
         switch quality {
         case 0.8...1.0: .green
@@ -589,7 +625,7 @@ struct DirectVideoCallView: View {
         default: .red
         }
     }
-    
+
     private var signalHistory: [SignalData] {
         (0..<10).map { i in
             SignalData(
@@ -598,7 +634,7 @@ struct DirectVideoCallView: View {
             )
         }
     }
-    
+
     private var speedHistory: [SpeedData] {
         (0..<8).map { i in
             SpeedData(
@@ -618,7 +654,7 @@ struct SupportedPose {
 
 struct SupportedPoseRow: View {
     let pose: SupportedPose
-    
+
     var body: some View {
         HStack(spacing: 12) {
             // Icon
@@ -626,27 +662,27 @@ struct SupportedPoseRow: View {
                 .font(.system(size: 24))
                 .foregroundColor(categoryColor)
                 .frame(width: 32)
-            
+
             // Pose info
             VStack(alignment: .leading, spacing: 2) {
                 Text(pose.name)
                     .font(.subheadline)
                     .fontWeight(.medium)
-                
+
                 Text(pose.category)
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
-            
+
             Spacer()
-            
+
             // Confidence
             VStack(alignment: .trailing, spacing: 2) {
                 Text("\(pose.confidence)%")
                     .font(.caption)
                     .fontWeight(.semibold)
                     .foregroundColor(confidenceColor)
-                
+
                 Text("confidence")
                     .font(.caption2)
                     .foregroundColor(.secondary)
@@ -654,7 +690,7 @@ struct SupportedPoseRow: View {
         }
         .padding(.vertical, 4)
     }
-    
+
     private var categoryColor: Color {
         switch pose.category {
         case "Basic": .blue
@@ -664,7 +700,7 @@ struct SupportedPoseRow: View {
         default: .gray
         }
     }
-    
+
     private var confidenceColor: Color {
         switch pose.confidence {
         case 90...100: .green
@@ -686,35 +722,46 @@ struct SpeedData {
 }
 
 @ViewBuilder
-private func cornerOverlay(position: Alignment, @ViewBuilder content: () -> some View) -> some View {
+private func cornerOverlay(position: Alignment, @ViewBuilder content: () -> some View) -> some View
+{
     content()
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: position)
 }
 
 #Preview {
-    DirectVideoCallView(store: .init(initialState: DirectVideoCallFeature.State(), reducer: {
-        DirectVideoCallFeature()
-    }))
+    DirectVideoCallView(
+        store: .init(
+            initialState: DirectVideoCallFeature.State(),
+            reducer: {
+                DirectVideoCallFeature()
+            }))
 }
 
 #Preview("Test Battery") {
-    DirectVideoCallView(store: .init(initialState: DirectVideoCallFeature.State(), reducer: {
-        DirectVideoCallFeature()
-            .body.dependency(\.batteryClient, .testValue)
-    }))
+    DirectVideoCallView(
+        store: .init(
+            initialState: DirectVideoCallFeature.State(),
+            reducer: {
+                DirectVideoCallFeature()
+                    .body.dependency(\.batteryClient, .testValue)
+            }))
 }
 
 struct MaskBorderAnimation1: View {
     @State private var angle: CGFloat = 0
-    
+
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 20)
                 .fill(.black)
                 .frame(width: 200, height: 200)
-            
+
             RoundedRectangle(cornerRadius: 20)
-                .foregroundStyle(.linearGradient(colors: [.cyan, .indigo, .orange, .brown, .red, .blue], startPoint: .top, endPoint: .bottom))
+                .foregroundStyle(
+                    .linearGradient(
+                        colors: [.cyan, .indigo, .orange, .brown, .red, .blue], startPoint: .top,
+                        endPoint: .bottom)
+                )
                 .frame(width: 300, height: 300)
                 .rotationEffect(.degrees(angle))
                 .mask {

@@ -9,7 +9,7 @@ import SwiftUI
 struct AnimatedBatteryView: View {
     let bLevel: Int
     let isCharging: Bool
-    
+
     var body: some View {
         ZStack {
             Image(systemName: batterySymbolName)
@@ -29,12 +29,12 @@ struct AnimatedBatteryView: View {
                 .animation(.easeInOut(duration: 0.3), value: bLevel)
         }
     }
-    
+
     private var batterySymbolName: String {
         if isCharging {
             return "battery.100.bolt"
         }
-        
+
         switch bLevel {
         case 0:
             return "battery.0"
@@ -48,10 +48,10 @@ struct AnimatedBatteryView: View {
             return "battery.100"
         }
     }
-    
+
     private var batteryColor: Color {
         if isCharging { return .green }
-        
+
         switch bLevel {
         case 0..<20: return .red
         case 20..<50: return .orange

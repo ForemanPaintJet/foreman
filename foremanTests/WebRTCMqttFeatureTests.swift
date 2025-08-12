@@ -38,7 +38,8 @@ struct WebRTCMqttFeatureTests {
     func testClearMessagesAndError() async throws {
         let store = TestStore(
             initialState: WebRTCMqttFeature.State(
-                lastError: "Some error", messages: [
+                lastError: "Some error",
+                messages: [
                     MQTTPublishInfo(
                         qos: .atLeastOnce, retain: false, topicName: "test", payload: ByteBuffer(),
                         properties: .init([]))

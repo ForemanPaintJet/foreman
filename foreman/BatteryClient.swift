@@ -30,7 +30,8 @@ extension BatteryClient: DependencyKey {
             // 先發一次當前電量
             subject.send(Int(UIDevice.current.batteryLevel * 100))
 
-            return subject
+            return
+                subject
                 .handleEvents(receiveCancel: {
                     NotificationCenter.default.removeObserver(observer)
                 })

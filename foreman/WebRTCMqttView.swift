@@ -22,9 +22,12 @@ struct WebRTCMqttView: View {
                 .ignoresSafeArea()
             Group {
                 if store.isJoinedToRoom {
-                    DirectVideoCallView(store: .init(initialState: DirectVideoCallFeature.State(), reducer: {
-                        DirectVideoCallFeature()
-                    }))
+                    DirectVideoCallView(
+                        store: .init(
+                            initialState: DirectVideoCallFeature.State(),
+                            reducer: {
+                                DirectVideoCallFeature()
+                            }))
                 } else {
                     VStack {
                         Spacer()
@@ -34,30 +37,34 @@ struct WebRTCMqttView: View {
                                 Text("MQTT Broker")
                                     .font(.headline)
                                 TextField(
-                                    "Address", text: $store.mqttInfo.address.sending(\.view.updateMqttAddress)
+                                    "Address",
+                                    text: $store.mqttInfo.address.sending(\.view.updateMqttAddress)
                                 )
                                 .textFieldStyle(RoundedBorderTextFieldStyle())
                                 TextField(
-                                    "Port", value: $store.mqttInfo.port.sending(\.view.updateMqttPort),
+                                    "Port",
+                                    value: $store.mqttInfo.port.sending(\.view.updateMqttPort),
                                     format: .number
                                 )
                                 .textFieldStyle(RoundedBorderTextFieldStyle())
-                                TextField("User ID", text: $store.userId.sending(\.view.updateUserId))
-                                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                                
+                                TextField(
+                                    "User ID", text: $store.userId.sending(\.view.updateUserId)
+                                )
+                                .textFieldStyle(RoundedBorderTextFieldStyle())
+
                                 HStack {
                                     Button("Connect") {
                                         logger.info("User tapped Connect")
                                         store.send(.view(.connectToBroker))
                                     }
                                     .disabled(store.connectionStatus == .connected)
-                                    
+
                                     Button("Join Room") {
                                         logger.info("User tapped Join Room")
                                         store.send(.view(.joinRoom))
                                     }
                                     .disabled(store.connectionStatus != .connected)
-                                    
+
                                     Button("Disconnect") {
                                         logger.info("User tapped Disconnect")
                                         store.send(.view(.disconnect))
@@ -66,7 +73,8 @@ struct WebRTCMqttView: View {
                                 }
                             }
                             .padding()
-                            .background(RoundedRectangle(cornerRadius: 12).fill(Color(.systemGray6)))
+                            .background(
+                                RoundedRectangle(cornerRadius: 12).fill(Color(.systemGray6)))
                         }
                         .frame(maxWidth: 400)
                         Spacer()

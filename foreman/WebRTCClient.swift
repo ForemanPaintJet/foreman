@@ -9,6 +9,7 @@ import AVFoundation
 import Combine
 import ComposableArchitecture
 import Foundation
+import OSLog
 import WebRTC
 
 // MARK: - WebRTC Models
@@ -38,6 +39,7 @@ class WebRTCClient: NSObject, ObservableObject {
 
     private var peerConnectionFactory: RTCPeerConnectionFactory!
     private var peerConnectionDelegates: [String: PeerConnectionDelegate] = [:]
+    private let logger = Logger(subsystem: "foreman", category: "WebRTCClient")
 
     // ICE servers configuration
     private let iceServers = [
@@ -58,7 +60,7 @@ class WebRTCClient: NSObject, ObservableObject {
     }
 
     private func setupWebRTC() {
-        print("🎥 WebRTCClient: Setting up WebRTC")
+        logger.info("🎥 WebRTCClient: Setting up WebRTC")
 
         // Initialize peer connection factory
         let decoderFactory = RTCDefaultVideoDecoderFactory()
@@ -72,7 +74,7 @@ class WebRTCClient: NSObject, ObservableObject {
     }
 
     private func setupLocalMedia() {
-        print("🎥 WebRTCClient: Setting up receive-only mode (no local media)")
+        logger.info("🎥 WebRTCClient: Setting up receive-only mode (no local media)")
 
         // For receive-only mode, we don't need to set up local camera/microphone
         // We'll only handle incoming video/audio streams from other clients
@@ -82,22 +84,23 @@ class WebRTCClient: NSObject, ObservableObject {
     }
 
     func toggleAudio() {
-        print("🔊 WebRTCClient: Audio controls disabled - receive-only mode")
+        logger.info("🔊 WebRTCClient: Audio controls disabled - receive-only mode")
     }
 
     func toggleVideo() {
-        print("🎥 WebRTCClient: Video controls disabled - receive-only mode")
+        logger.info("🎥 WebRTCClient: Video controls disabled - receive-only mode")
     }
 
     func switchCamera() {
-        print("📷 WebRTCClient: Camera controls disabled - receive-only mode")
+        logger.info("📷 WebRTCClient: Camera controls disabled - receive-only mode")
     }
 
     // MARK: - Peer Connection Management
 
     func createPeerConnection(for userId: String) -> RTCPeerConnection? {
-        print("🤝 WebRTCClient: Creating peer connection for user: \(userId)")
-        print("🤝 WebRTCClient: Current peer connections: \(peerConnections.keys.sorted())")
+        logger.info("🤝 WebRTCClient: Creating peer connection for user: \(userId)")
+        let currentConnections = peerConnections.keys.sorted()
+        logger.info("🤝 WebRTCClient: Current peer connections: \(currentConnections)")
 
         let configuration = RTCConfiguration()
         configuration.iceServers = iceServers
@@ -107,7 +110,8 @@ class WebRTCClient: NSObject, ObservableObject {
         configuration.bundlePolicy = .balanced
         configuration.rtcpMuxPolicy = .require
 
-        print("🤝 WebRTCClient: ICE servers configured: \(iceServers.count)")
+        let iceServersCount = iceServers.count
+        logger.info("🤝 WebRTCClient: ICE servers configured: \(iceServersCount)")
 
         let constraints = RTCMediaConstraints(mandatoryConstraints: nil, optionalConstraints: nil)
 
@@ -115,43 +119,46 @@ class WebRTCClient: NSObject, ObservableObject {
             let peerConnection = peerConnectionFactory.peerConnection(
                 with: configuration, constraints: constraints, delegate: nil)
         else {
-            print("❌ WebRTCClient: Failed to create peer connection for \(userId)")
+            logger.error("❌ WebRTCClient: Failed to create peer connection for \(userId)")
             return nil
         }
 
-        print("✅ WebRTCClient: RTCPeerConnection created successfully for \(userId)")
+        logger.info("✅ WebRTCClient: RTCPeerConnection created successfully for \(userId)")
 
         // Set delegate and store it to prevent deallocation
         let delegate = PeerConnectionDelegate(userId: userId, webRTCClient: self)
         peerConnection.delegate = delegate
         peerConnectionDelegates[userId] = delegate
-        print("✅ WebRTCClient: Delegate set and stored for peer connection \(userId)")
+        logger.info("✅ WebRTCClient: Delegate set and stored for peer connection \(userId)")
 
         // For receive-only mode, we add transceivers to receive audio and video
         // This helps with proper ICE negotiation
         let audioTransceiverInit = RTCRtpTransceiverInit()
         audioTransceiverInit.direction = .recvOnly
         peerConnection.addTransceiver(of: .audio, init: audioTransceiverInit)
-        print("🎵 WebRTCClient: Audio receive-only transceiver added for \(userId)")
+        logger.info("🎵 WebRTCClient: Audio receive-only transceiver added for \(userId)")
 
         let videoTransceiverInit = RTCRtpTransceiverInit()
         videoTransceiverInit.direction = .recvOnly
         peerConnection.addTransceiver(of: .video, init: videoTransceiverInit)
-        print("🎥 WebRTCClient: Video receive-only transceiver added for \(userId)")
+        logger.info("🎥 WebRTCClient: Video receive-only transceiver added for \(userId)")
 
         peerConnections[userId] = peerConnection
 
         updateConnectionState(for: userId, state: peerConnection.connectionState)
 
-        print("✅ WebRTCClient: Receive-only peer connection created for \(userId)")
-        print("🧊 WebRTCClient: ICE gathering state: \(peerConnection.iceGatheringState.rawValue)")
-        print("🧊 WebRTCClient: ICE connection state: \(peerConnection.iceConnectionState.rawValue)")
-        print("🤝 WebRTCClient: Total peer connections: \(peerConnections.count)")
+        logger.info("✅ WebRTCClient: Receive-only peer connection created for \(userId)")
+        logger.info(
+            "🧊 WebRTCClient: ICE gathering state: \(peerConnection.iceGatheringState.rawValue)")
+        logger.info(
+            "🧊 WebRTCClient: ICE connection state: \(peerConnection.iceConnectionState.rawValue)")
+        let totalConnections = peerConnections.count
+        logger.info("🤝 WebRTCClient: Total peer connections: \(totalConnections)")
         return peerConnection
     }
 
     func removePeerConnection(for userId: String) {
-        print("🗑️ WebRTCClient: Removing peer connection for user: \(userId)")
+        logger.info("🗑️ WebRTCClient: Removing peer connection for user: \(userId)")
 
         if let peerConnection = peerConnections[userId] {
             peerConnection.close()
@@ -165,7 +172,7 @@ class WebRTCClient: NSObject, ObservableObject {
         remoteVideoTracks.removeAll { $0.userId == userId }
         connectionStates.removeAll { $0.userId == userId }
 
-        print("✅ WebRTCClient: Peer connection and delegate removed for \(userId)")
+        logger.info("✅ WebRTCClient: Peer connection and delegate removed for \(userId)")
     }
 
     func createOffer(for userId: String) async throws {
@@ -173,7 +180,7 @@ class WebRTCClient: NSObject, ObservableObject {
             throw WebRTCError.peerConnectionNotFound
         }
 
-        print("📞 WebRTCClient: Creating offer for \(userId)")
+        logger.info("📞 WebRTCClient: Creating offer for \(userId)")
 
         let constraints = RTCMediaConstraints(mandatoryConstraints: nil, optionalConstraints: nil)
 
@@ -181,12 +188,13 @@ class WebRTCClient: NSObject, ObservableObject {
             let offer = try await peerConnection.offer(for: constraints)
             try await peerConnection.setLocalDescription(offer)
 
-            let webRTCOffer = WebRTCOffer(sdp: offer.sdp, type: "offer", clientId: userId, videoSource: "")
+            let webRTCOffer = WebRTCOffer(
+                sdp: offer.sdp, type: "offer", clientId: userId, videoSource: "")
 
             offerSubject.send(webRTCOffer)
-            print("✅ WebRTCClient: Offer created and sent for \(userId)")
+            logger.info("✅ WebRTCClient: Offer created and sent for \(userId)")
         } catch {
-            print("❌ WebRTCClient: Failed to create offer for \(userId): \(error)")
+            logger.error("❌ WebRTCClient: Failed to create offer for \(userId): \(error)")
             throw error
         }
     }
@@ -194,72 +202,76 @@ class WebRTCClient: NSObject, ObservableObject {
     func handleRemoteOffer(_ offer: WebRTCOffer) async throws {
         let userId = offer.clientId
 
-        print("📞 WebRTCClient: Handling remote offer from \(userId)")
-        print("📞 WebRTCClient: Offer SDP length: \(offer.sdp.count)")
-        print(
-            "📞 WebRTCClient: Current peer connections before handling: \(peerConnections.keys.sorted())"
+        logger.info("📞 WebRTCClient: Handling remote offer from \(userId)")
+        logger.info("📞 WebRTCClient: Offer SDP length: \(offer.sdp.count)")
+        let currentConnections = peerConnections.keys.sorted()
+        logger.info(
+            "📞 WebRTCClient: Current peer connections before handling: \(currentConnections)"
         )
 
         if peerConnections[userId] == nil {
-            print("📞 WebRTCClient: No existing peer connection for \(userId), creating new one")
+            logger.info(
+                "📞 WebRTCClient: No existing peer connection for \(userId), creating new one")
             let created = createPeerConnection(for: userId)
             if created == nil {
-                print("❌ WebRTCClient: Failed to create peer connection for \(userId)")
+                logger.error("❌ WebRTCClient: Failed to create peer connection for \(userId)")
                 throw WebRTCError.peerConnectionNotFound
             }
         } else {
-            print("📞 WebRTCClient: Using existing peer connection for \(userId)")
+            logger.info("📞 WebRTCClient: Using existing peer connection for \(userId)")
         }
 
         guard let peerConnection = peerConnections[userId] else {
-            print("❌ WebRTCClient: Peer connection still nil after creation attempt for \(userId)")
+            logger.error(
+                "❌ WebRTCClient: Peer connection still nil after creation attempt for \(userId)")
             throw WebRTCError.peerConnectionNotFound
         }
 
-        print(
+        logger.info(
             "📞 WebRTCClient: Peer connection found for \(userId), state: \(peerConnection.connectionState)"
         )
 
         let remoteDescription = RTCSessionDescription(type: .offer, sdp: offer.sdp)
 
         do {
-            print("🔄 WebRTCClient: Setting remote description (offer) for \(userId)")
+            logger.info("🔄 WebRTCClient: Setting remote description (offer) for \(userId)")
             try await peerConnection.setRemoteDescription(remoteDescription)
-            print("✅ WebRTCClient: Remote description set for \(userId)")
+            logger.info("✅ WebRTCClient: Remote description set for \(userId)")
 
             let constraints = RTCMediaConstraints(
                 mandatoryConstraints: nil, optionalConstraints: nil)
-            print("🔄 WebRTCClient: Creating answer for \(userId)")
+            logger.info("🔄 WebRTCClient: Creating answer for \(userId)")
             let answer = try await peerConnection.answer(for: constraints)
-            print("✅ WebRTCClient: Answer created for \(userId)")
+            logger.info("✅ WebRTCClient: Answer created for \(userId)")
 
-            print("🔄 WebRTCClient: Setting local description (answer) for \(userId)")
+            logger.info("🔄 WebRTCClient: Setting local description (answer) for \(userId)")
             try await peerConnection.setLocalDescription(answer)
-            print("✅ WebRTCClient: Local description set for \(userId)")
-            print(
+            logger.info("✅ WebRTCClient: Local description set for \(userId)")
+            logger.info(
                 "🧊 WebRTCClient: ICE gathering state after setting local description: \(peerConnection.iceGatheringState.rawValue)"
             )
-            print(
+            logger.info(
                 "🧊 WebRTCClient: ICE connection state after setting local description: \(peerConnection.iceConnectionState.rawValue)"
             )
-            
-            let webRTCAnswer = WebRTCAnswer(sdp: answer.sdp, type: "answer", clientId: userId, videoSource: "")
+
+            let webRTCAnswer = WebRTCAnswer(
+                sdp: answer.sdp, type: "answer", clientId: userId, videoSource: "")
 
             answerSubject.send(webRTCAnswer)
-            print("✅ WebRTCClient: Answer created and sent for \(userId)")
+            logger.info("✅ WebRTCClient: Answer created and sent for \(userId)")
 
             // Add a small delay to allow ICE gathering to start
-            Task {
+            Task { [logger] in
                 try await Task.sleep(nanoseconds: 1_000_000_000)  // 1 second
-                print(
+                logger.info(
                     "🧊 WebRTCClient: ICE gathering state after 1s: \(peerConnection.iceGatheringState.rawValue)"
                 )
-                print(
+                logger.info(
                     "🧊 WebRTCClient: ICE connection state after 1s: \(peerConnection.iceConnectionState.rawValue)"
                 )
             }
         } catch {
-            print("❌ WebRTCClient: Failed to handle remote offer from \(userId): \(error)")
+            logger.error("❌ WebRTCClient: Failed to handle remote offer from \(userId): \(error)")
             throw error
         }
     }
@@ -267,7 +279,7 @@ class WebRTCClient: NSObject, ObservableObject {
     func handleRemoteAnswer(_ answer: WebRTCAnswer) async throws {
         let userId = answer.clientId
 
-        print("📞 WebRTCClient: Handling remote answer from \(userId)")
+        logger.info("📞 WebRTCClient: Handling remote answer from \(userId)")
 
         guard let peerConnection = peerConnections[userId] else {
             throw WebRTCError.peerConnectionNotFound
@@ -277,9 +289,9 @@ class WebRTCClient: NSObject, ObservableObject {
 
         do {
             try await peerConnection.setRemoteDescription(remoteDescription)
-            print("✅ WebRTCClient: Remote answer set for \(userId)")
+            logger.info("✅ WebRTCClient: Remote answer set for \(userId)")
         } catch {
-            print("❌ WebRTCClient: Failed to handle remote answer from \(userId): \(error)")
+            logger.error("❌ WebRTCClient: Failed to handle remote answer from \(userId): \(error)")
             throw error
         }
     }
@@ -287,7 +299,7 @@ class WebRTCClient: NSObject, ObservableObject {
     func handleRemoteIceCandidate(_ candidate: ICECandidate) async throws {
         let userId = candidate.clientId
 
-        print("🧊 WebRTCClient: Handling ICE candidate from \(userId)")
+        logger.info("🧊 WebRTCClient: Handling ICE candidate from \(userId)")
 
         guard let peerConnection = peerConnections[userId] else {
             throw WebRTCError.peerConnectionNotFound
@@ -301,9 +313,9 @@ class WebRTCClient: NSObject, ObservableObject {
 
         do {
             try await peerConnection.add(iceCandidate)
-            print("✅ WebRTCClient: ICE candidate added for \(userId)")
+            logger.info("✅ WebRTCClient: ICE candidate added for \(userId)")
         } catch {
-            print("❌ WebRTCClient: Failed to add ICE candidate for \(userId): \(error)")
+            logger.error("❌ WebRTCClient: Failed to add ICE candidate for \(userId): \(error)")
             throw error
         }
     }
@@ -311,14 +323,15 @@ class WebRTCClient: NSObject, ObservableObject {
     // MARK: - Internal Methods
 
     func addRemoteVideoTrack(_ track: RTCVideoTrack, for userId: String) {
-        print("📺 WebRTCClient: Adding remote video track for \(userId)")
-        print(
+        logger.info("📺 WebRTCClient: Adding remote video track for \(userId)")
+        logger.info(
             "📺 WebRTCClient: Video track state - isEnabled: \(track.isEnabled), readyState: \(track.readyState)"
         )
 
         // Check if we already have a video track for this user
         if remoteVideoTracks.contains(where: { $0.userId == userId }) {
-            print("⚠️ WebRTCClient: Video track for \(userId) already exists, skipping duplicate")
+            logger.warning(
+                "⚠️ WebRTCClient: Video track for \(userId) already exists, skipping duplicate")
             return
         }
 
@@ -329,13 +342,15 @@ class WebRTCClient: NSObject, ObservableObject {
         )
 
         remoteVideoTracks.append(videoTrackInfo)
-        print(
-            "✅ WebRTCClient: Added remote video track for \(userId) - Total tracks: \(remoteVideoTracks.count)"
+        let totalTracks = remoteVideoTracks.count
+        logger.info(
+            "✅ WebRTCClient: Added remote video track for \(userId) - Total tracks: \(totalTracks)"
         )
 
         // Log all current video tracks
-        for (index, trackInfo) in remoteVideoTracks.enumerated() {
-            print(
+        let tracks = remoteVideoTracks
+        for (index, trackInfo) in tracks.enumerated() {
+            logger.info(
                 "📺 Track \(index): User \(trackInfo.userId), Enabled: \(trackInfo.track?.isEnabled ?? false)"
             )
         }
@@ -348,20 +363,25 @@ class WebRTCClient: NSObject, ObservableObject {
             connectionStates.append(PeerConnectionInfo(userId: userId, connectionState: state))
         }
 
-        print("🔗 WebRTCClient: Connection state for \(userId): \(state)")
+        logger.info("🔗 WebRTCClient: Connection state for \(userId): \(String(describing: state))")
     }
 
     func handleIceCandidate(_ candidate: RTCIceCandidate, for userId: String) {
-        print("🧊 WebRTCClient: Processing ICE candidate for \(userId)")
-        print("🧊 WebRTCClient: Candidate details - SDP: \(candidate.sdp)")
-        print(
+        logger.info("🧊 WebRTCClient: Processing ICE candidate for \(userId)")
+        logger.info("🧊 WebRTCClient: Candidate details - SDP: \(candidate.sdp)")
+        logger.info(
             "🧊 WebRTCClient: Candidate details - M-Line: \(candidate.sdpMLineIndex), MID: \(candidate.sdpMid ?? "nil")"
         )
-        
-        let iceCandidate = ICECandidate(type: "ice", clientId: userId, candidate: .init(candidate: candidate.sdp, sdpMLineIndex: Int(candidate.sdpMLineIndex), sdpMid: candidate.sdp))
+
+        let iceCandidate = ICECandidate(
+            type: "ice", clientId: userId,
+            candidate: .init(
+                candidate: candidate.sdp, sdpMLineIndex: Int(candidate.sdpMLineIndex),
+                sdpMid: candidate.sdp
+            ))
 
         iceCandidateSubject.send(iceCandidate)
-        print("🧊 WebRTCClient: ICE candidate sent to signaling for \(userId)")
+        logger.info("🧊 WebRTCClient: ICE candidate sent to signaling for \(userId)")
     }
 }
 
@@ -370,6 +390,7 @@ class WebRTCClient: NSObject, ObservableObject {
 class PeerConnectionDelegate: NSObject, RTCPeerConnectionDelegate {
     private let userId: String
     private weak var webRTCClient: WebRTCClient?
+    private let logger = Logger(subsystem: "foreman", category: "PeerConnectionDelegate")
 
     init(userId: String, webRTCClient: WebRTCClient) {
         self.userId = userId
@@ -380,23 +401,25 @@ class PeerConnectionDelegate: NSObject, RTCPeerConnectionDelegate {
     func peerConnection(
         _ peerConnection: RTCPeerConnection, didChange stateChanged: RTCSignalingState
     ) {
-        print("🔗 PeerConnection[\(userId)]: Signaling state changed to \(stateChanged)")
+        logger.info("🔗 PeerConnection[\(userId)]: Signaling state changed to \(stateChanged)")
     }
 
     func peerConnection(_ peerConnection: RTCPeerConnection, didAdd stream: RTCMediaStream) {
-        print(
+        logger.info(
             "📺 PeerConnection[\(userId)]: Legacy stream added with \(stream.audioTracks.count) audio tracks and \(stream.videoTracks.count) video tracks"
         )
-        print("📺 PeerConnection[\(userId)]: Skipping legacy stream handling - using modern track-based approach")
+        logger.info(
+            "📺 PeerConnection[\(userId)]: Skipping legacy stream handling - using modern track-based approach"
+        )
 
         // We skip the legacy stream-based approach and rely on the modern didAdd receiver method
         // This prevents duplicate video tracks from being added
     }
 
     func peerConnection(_ peerConnection: RTCPeerConnection, didRemove stream: RTCMediaStream) {
-        print("📺 PeerConnection[\(userId)]: Stream removed")
+        logger.info("📺 PeerConnection[\(userId)]: Stream removed")
 
-        Task { @MainActor in
+        Task { @MainActor [weak webRTCClient, userId] in
             webRTCClient?.remoteVideoTracks.removeAll { $0.userId == userId }
         }
     }
@@ -407,27 +430,28 @@ class PeerConnectionDelegate: NSObject, RTCPeerConnectionDelegate {
         _ peerConnection: RTCPeerConnection, didAdd receiver: RTCRtpReceiver,
         streams: [RTCMediaStream]
     ) {
-        print("📺 PeerConnection[\(userId)]: Modern track added via receiver")
-        print("📺 PeerConnection[\(userId)]: Track kind: \(receiver.track?.kind ?? "unknown")")
-        print("📺 PeerConnection[\(userId)]: Track enabled: \(receiver.track?.isEnabled ?? false)")
-        print("📺 PeerConnection[\(userId)]: Streams count: \(streams.count)")
+        logger.info("📺 PeerConnection[\(userId)]: Modern track added via receiver")
+        logger.info("📺 PeerConnection[\(userId)]: Track kind: \(receiver.track?.kind ?? "unknown")")
+        logger.info(
+            "📺 PeerConnection[\(userId)]: Track enabled: \(receiver.track?.isEnabled ?? false)")
+        logger.info("📺 PeerConnection[\(userId)]: Streams count: \(streams.count)")
 
         if let track = receiver.track, track.kind == "video",
             let videoTrack = track as? RTCVideoTrack
         {
-            print(
+            logger.info(
                 "📺 PeerConnection[\(userId)]: Modern video track received - adding to WebRTC client"
             )
-            Task { @MainActor in
+            Task { @MainActor [weak webRTCClient, userId] in
                 webRTCClient?.addRemoteVideoTrack(videoTrack, for: userId)
             }
         } else if let track = receiver.track, track.kind == "audio" {
-            print("🔊 PeerConnection[\(userId)]: Modern audio track received")
+            logger.info("🔊 PeerConnection[\(userId)]: Modern audio track received")
         }
     }
 
     func peerConnection(_ peerConnection: RTCPeerConnection, didRemove receiver: RTCRtpReceiver) {
-        print("📺 PeerConnection[\(userId)]: Modern track removed via receiver")
+        logger.info("📺 PeerConnection[\(userId)]: Modern track removed via receiver")
 
         if let track = receiver.track, track.kind == "video" {
             Task { @MainActor in
@@ -438,10 +462,10 @@ class PeerConnectionDelegate: NSObject, RTCPeerConnectionDelegate {
 
     func peerConnection(_ peerConnection: RTCPeerConnection, didGenerate candidate: RTCIceCandidate)
     {
-        print("🧊 PeerConnection[\(userId)]: ICE candidate generated")
-        print("🧊 PeerConnection[\(userId)]: Candidate SDP: \(candidate.sdp)")
-        print("🧊 PeerConnection[\(userId)]: SDP M-Line Index: \(candidate.sdpMLineIndex)")
-        print("🧊 PeerConnection[\(userId)]: SDP MID: \(candidate.sdpMid ?? "nil")")
+        logger.info("🧊 PeerConnection[\(userId)]: ICE candidate generated")
+        logger.info("🧊 PeerConnection[\(userId)]: Candidate SDP: \(candidate.sdp)")
+        logger.info("🧊 PeerConnection[\(userId)]: SDP M-Line Index: \(candidate.sdpMLineIndex)")
+        logger.info("🧊 PeerConnection[\(userId)]: SDP MID: \(candidate.sdpMid ?? "nil")")
 
         Task { @MainActor in
             webRTCClient?.handleIceCandidate(candidate, for: userId)
@@ -451,33 +475,33 @@ class PeerConnectionDelegate: NSObject, RTCPeerConnectionDelegate {
     func peerConnection(
         _ peerConnection: RTCPeerConnection, didRemove candidates: [RTCIceCandidate]
     ) {
-        print("🧊 PeerConnection[\(userId)]: ICE candidates removed")
+        logger.info("🧊 PeerConnection[\(userId)]: ICE candidates removed")
     }
 
     func peerConnection(_ peerConnection: RTCPeerConnection, didOpen dataChannel: RTCDataChannel) {
-        print("📡 PeerConnection[\(userId)]: Data channel opened")
+        logger.info("📡 PeerConnection[\(userId)]: Data channel opened")
     }
 
     func peerConnectionShouldNegotiate(_ peerConnection: RTCPeerConnection) {
-        print("🔄 PeerConnection[\(userId)]: Should negotiate")
+        logger.info("🔄 PeerConnection[\(userId)]: Should negotiate")
     }
 
     func peerConnection(
         _ peerConnection: RTCPeerConnection, didChange newState: RTCIceConnectionState
     ) {
-        print("🧊 PeerConnection[\(userId)]: ICE connection state changed to \(newState)")
+        logger.info("🧊 PeerConnection[\(userId)]: ICE connection state changed to \(newState)")
     }
 
     func peerConnection(
         _ peerConnection: RTCPeerConnection, didChange newState: RTCIceGatheringState
     ) {
-        print("🧊 PeerConnection[\(userId)]: ICE gathering state changed to \(newState)")
+        logger.info("🧊 PeerConnection[\(userId)]: ICE gathering state changed to \(newState)")
     }
 
     func peerConnection(
         _ peerConnection: RTCPeerConnection, didChange newState: RTCPeerConnectionState
     ) {
-        print("🔗 PeerConnection[\(userId)]: Peer connection state changed to \(newState)")
+        logger.info("🔗 PeerConnection[\(userId)]: Peer connection state changed to \(newState)")
 
         Task { @MainActor in
             webRTCClient?.updateConnectionState(for: userId, state: newState)

@@ -7,16 +7,19 @@ struct ContentView: View {
             Rectangle()
                 .fill(.orange.gradient)
                 .ignoresSafeArea()
-//            AnimatedMeshBackground()
-            
-//            WebRTCSocketView(store: .init(initialState: WebRTCSocketFeature.State(), reducer: {
-//                WebRTCSocketFeature()
-//            }))
-            
+            //            AnimatedMeshBackground()
+
+            //            WebRTCSocketView(store: .init(initialState: WebRTCSocketFeature.State(), reducer: {
+            //                WebRTCSocketFeature()
+            //            }))
+
             // Your main app content goes here
-            WebRTCMqttView(store: .init(initialState: WebRTCMqttFeature.State(), reducer: {
-                WebRTCMqttFeature()
-            }))
+            WebRTCMqttView(
+                store: .init(
+                    initialState: WebRTCMqttFeature.State(),
+                    reducer: {
+                        WebRTCMqttFeature()
+                    }))
         }
     }
 }
