@@ -97,7 +97,6 @@ struct DirectVideoCallFeature {
         switch action {
         case .binding:
             return .none
-
         case .view(.task):
             // Start battery monitoring
             return .publisher {
@@ -129,7 +128,37 @@ struct DirectVideoCallFeature {
         case ._internal(.batteryLevelChanged(let value)):
             state.batteryLevel = value
             return .none
-
+        case .view(.task):
+                // Start battery monitoring
+                return .publisher {
+                    batteryClient.batteryLevelPublisher()
+                        .map { ._internal(.batteryLevelChanged($0)) }
+                }
+                .cancellable(id: CancelID.battery)
+            case .view(.showConfig(let show)):
+                state.showConfig = show
+                return .none
+            case .view(.showHumanPose(let show)):
+                state.showHumanPose = show
+                return .none
+            case .view(.toggleWifiDetails):
+                state.showWifiDetails.toggle()
+                return .none
+            case .view(.updateDistanceRandom):
+                state.distanceFt = Double.random(in: 1...100)
+                return .none
+            case .view(.closeConfig):
+                state.showConfig = false
+                return .none
+            case .view(.closeHumanPose):
+                state.showHumanPose = false
+                return .none
+            case .view(.simulateAlert(let alertType)):
+                state.currentAlert = alertType
+                return .none
+        case ._internal(.batteryLevelChanged(let value)):
+            state.batteryLevel = value
+            return .none
         case .delegate:
             return .none
         }
