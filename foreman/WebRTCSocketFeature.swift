@@ -49,7 +49,7 @@ struct WebRTCSocketFeature {
     }
 
     @CasePathable
-    enum Action: Equatable, BindableAction {
+    enum Action: Equatable, BindableAction, ComposableArchitecture.ViewAction {
         case view(ViewAction)
         case binding(BindingAction<State>)
         case _internal(InternalAction)
@@ -597,6 +597,8 @@ struct WebRTCSocketFeature {
     // MARK: - Helper Functions
 
     private func executeDisconnect(state: inout State) -> Effect<Action> {
+        @Dependency(\.socketClient) var socketClient
+        @Dependency(\.webRTCClient) var webRTCClient
         return .run {
             [
                 isJoinedToRoom = state.isJoinedToRoom, roomId = state.roomId,

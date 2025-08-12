@@ -6,14 +6,14 @@
 //
 
 import ComposableArchitecture
-import Logging
+import OSLog
 import SwiftUI
 
+@ViewAction(for: WebRTCMqttFeature.self)
 struct WebRTCMqttView: View {
     @Bindable var store: StoreOf<WebRTCMqttFeature>
 
-    // SwiftLog logger instance
-    private let logger = Logger(label: "WebRTCMqttView")
+    private let logger = Logger(subsystem: "foreman", category: "WebRTCMqttView")
 
     var body: some View {
         ZStack {
@@ -55,19 +55,19 @@ struct WebRTCMqttView: View {
                                 HStack {
                                     Button("Connect") {
                                         logger.info("User tapped Connect")
-                                        store.send(.view(.connectToBroker))
+                                        send(.connectToBroker)
                                     }
                                     .disabled(store.connectionStatus == .connected)
 
                                     Button("Join Room") {
                                         logger.info("User tapped Join Room")
-                                        store.send(.view(.joinRoom))
+                                        send(.joinRoom)
                                     }
                                     .disabled(store.connectionStatus != .connected)
 
                                     Button("Disconnect") {
                                         logger.info("User tapped Disconnect")
-                                        store.send(.view(.disconnect))
+                                        send(.disconnect)
                                     }
                                     .disabled(store.connectionStatus != .connected)
                                 }
@@ -84,13 +84,9 @@ struct WebRTCMqttView: View {
                 }
             }
         }
-        .onAppear {
-            logger.info("WebRTCMqttView appeared")
-            store.send(.view(.onAppear))
-        }
-        .onDisappear {
-            logger.info("WebRTCMqttView disappeared")
-            store.send(.view(.onDisappear))
+        .task {
+            logger.info("WebRTCMqttView task started")
+            send(.task)
         }
         .alert($store.scope(state: \.alert, action: \.alert))
     }

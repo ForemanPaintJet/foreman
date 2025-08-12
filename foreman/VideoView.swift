@@ -5,6 +5,7 @@
 //  Created by Jed Lu on 2025/7/4.
 //
 
+import Foundation
 import OSLog
 import SwiftUI
 import WebRTC
@@ -52,17 +53,17 @@ struct VideoView: UIViewRepresentable {
             context.coordinator.currentTrack = videoTrack
 
             // Force a layout update
-            DispatchQueue.main.async {
+            DispatchQueue.main.async { [self] in
                 uiView.setNeedsLayout()
                 uiView.layoutIfNeeded()
-                logger.info("📺 VideoView: Layout updated for video renderer")
+                self.logger.info("📺 VideoView: Layout updated for video renderer")
             }
 
             // Add a debug check to see if frames are being received
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                logger.info("📺 VideoView: Video renderer check - bounds: \(uiView.bounds)")
-                logger.info("📺 VideoView: Video renderer check - isHidden: \(uiView.isHidden)")
-                logger.info("📺 VideoView: Video renderer check - alpha: \(uiView.alpha)")
+            DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(2)) {
+                self.logger.info("📺 VideoView: Video renderer check - bounds: \(uiView.bounds)")
+                self.logger.info("📺 VideoView: Video renderer check - isHidden: \(uiView.isHidden)")
+                self.logger.info("📺 VideoView: Video renderer check - alpha: \(uiView.alpha)")
             }
         } else {
             logger.info("📺 VideoView: No video track to render")
@@ -79,12 +80,12 @@ struct VideoView: UIViewRepresentable {
         private let logger = Logger(subsystem: "foreman", category: "VideoViewCoordinator")
 
         func videoView(_ videoView: RTCVideoRenderer, didChangeVideoSize size: CGSize) {
-            logger.info("📺 VideoView: Video size changed to \(size)")
-            logger.info(
+            self.logger.info("📺 VideoView: Video size changed to \(size)")
+            self.logger.info(
                 "📺 VideoView: Video size change - width: \(size.width), height: \(size.height)")
 
             // Ensure we're on the main thread for UI updates
-            DispatchQueue.main.async {
+            DispatchQueue.main.async { [self] in
                 if let metalView = videoView as? RTCMTLVideoView {
                     metalView.setNeedsLayout()
                     metalView.layoutIfNeeded()
@@ -92,6 +93,18 @@ struct VideoView: UIViewRepresentable {
                 }
             }
         }
+    }
+}
+
+extension CGRect: @retroactive CustomStringConvertible {
+    public var description: String {
+        "\(self.size)"
+    }
+}
+
+extension CGSize: @retroactive CustomStringConvertible {
+    public var description: String {
+        "\(self.width), \(self.height)"
     }
 }
 

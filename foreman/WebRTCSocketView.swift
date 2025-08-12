@@ -9,6 +9,7 @@ import ComposableArchitecture
 import ForemanThemeCore
 import SwiftUI
 
+@ViewAction(for: WebRTCSocketFeature.self)
 struct WebRTCSocketView: View {
     @Bindable var store: StoreOf<WebRTCSocketFeature>
     @Dependency(\.themeService) var themeService
@@ -48,11 +49,8 @@ struct WebRTCSocketView: View {
         .frame(maxWidth: 1000, maxHeight: 800)  // Limit the view size instead of taking whole screen
         .clipShape(RoundedRectangle(cornerRadius: 12))  // Add rounded corners for better visual containment
         .alert($store.scope(state: \.alert, action: \.alert))
-        .onAppear {
-            store.send(.view(.onAppear))
-        }
-        .onDisappear {
-            store.send(.view(.onDisappear))
+        .task {
+            send(.task)
         }
     }
 
@@ -108,7 +106,7 @@ struct WebRTCSocketView: View {
                     lastError: store.lastError,
                     themeConfig: themeConfig
                 ) {
-                    store.send(.view(.clearError))
+                    send(.clearError)
                 }
 
                 // Connection Buttons
@@ -121,7 +119,7 @@ struct WebRTCSocketView: View {
                             || store.loadingItems.contains(.joiningRoom),
                         isEnabled: store.canConnect
                     ) {
-                        store.send(.view(.connectToServer))
+                        send(.connectToServer)
                     }
 
                     OperationButton(
@@ -131,7 +129,7 @@ struct WebRTCSocketView: View {
                         isExecuting: false,
                         isEnabled: store.connectionStatus == .connected
                     ) {
-                        store.send(.view(.disconnect))
+                        send(.disconnect)
                     }
                 }
             }
@@ -165,11 +163,11 @@ struct WebRTCSocketView: View {
                             themeConfig: themeConfig,
                             onSendOffer: {
                                 // Mock WebRTC offer for demo
-                                store.send(.view(.sendOffer(to: user, sdp: "mock-sdp-offer")))
+                                send(.sendOffer(to: user, sdp: "mock-sdp-offer"))
                             },
                             onSendAnswer: {
                                 // Mock WebRTC answer for demo
-                                store.send(.view(.sendAnswer(to: user, sdp: "mock-sdp-answer")))
+                                send(.sendAnswer(to: user, sdp: "mock-sdp-answer"))
                             }
                         )
                     }
@@ -194,7 +192,7 @@ struct WebRTCSocketView: View {
                 Spacer()
 
                 Button("Clear") {
-                    store.send(.view(.clearMessages))
+                    send(.clearMessages)
                 }
                 .font(.caption)
                 .foregroundColor(themeConfig.colorTheme.primary)
@@ -275,7 +273,7 @@ struct WebRTCSocketView: View {
                                     Spacer()
 
                                     Button("Watch") {
-                                        store.send(.view(.createOfferForUser(user)))
+                                        send(.createOfferForUser(user))
                                     }
                                     .buttonStyle(.borderedProminent)
                                     .buttonBorderShape(.capsule)

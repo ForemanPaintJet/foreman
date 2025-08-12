@@ -53,10 +53,16 @@ struct DirectVideoCallFeature {
         }
     }
 
-    enum Action: TCAFeatureAction {
+    @CasePathable
+    enum Action: Equatable, BindableAction, ComposableArchitecture.ViewAction {
+        case view(ViewAction)
+        case binding(BindingAction<State>)
+        case _internal(InternalAction)
+        case delegate(DelegateAction)
+        
         @CasePathable
         enum ViewAction: Equatable {
-            case onAppear
+            case task
             case showConfig(Bool)
             case showHumanPose(Bool)
             case toggleWifiDetails
@@ -74,10 +80,6 @@ struct DirectVideoCallFeature {
         enum DelegateAction: Equatable {
             // For future delegate logic
         }
-
-        case view(ViewAction)
-        case _internal(InternalAction)
-        case delegate(DelegateAction)
     }
 
     enum CancelID {
@@ -86,10 +88,17 @@ struct DirectVideoCallFeature {
 
     @Dependency(\.batteryClient) var batteryClient
 
-    var body: some Reducer<State, Action> {
-        Reduce { state, action in
-            switch action {
-            case .view(.onAppear):
+    var body: some ReducerOf<Self> {
+        BindingReducer()
+        Reduce(core)
+    }
+    
+    func core(into state: inout State, action: Action) -> Effect<Action> {
+        switch action {
+        case .binding:
+            return .none
+            
+        case .view(.task):
                 // Start battery monitoring
                 return .publisher {
                     batteryClient.batteryLevelPublisher()
@@ -117,20 +126,19 @@ struct DirectVideoCallFeature {
             case .view(.simulateAlert(let alertType)):
                 state.currentAlert = alertType
                 return .none
-            case ._internal(.batteryLevelChanged(let value)):
-                state.batteryLevel = value
-                return .none
-            case .delegate:
-                return .none
-            case ._internal:
-                return .none
-            }
+        case ._internal(.batteryLevelChanged(let value)):
+            state.batteryLevel = value
+            return .none
+            
+        case .delegate:
+            return .none
         }
     }
 }
 
+@ViewAction(for: DirectVideoCallFeature.self)
 struct DirectVideoCallView: View {
-    let store: StoreOf<DirectVideoCallFeature>
+    @Bindable var store: StoreOf<DirectVideoCallFeature>
     private let logger = Logger(subsystem: "foreman", category: "DirectVideoCallView")
 
     @Dependency(\.webRTCClient) var webRTCClientDependency
@@ -170,7 +178,7 @@ struct DirectVideoCallView: View {
                     VStack(spacing: 8) {
                         // Settings button
                         Button(action: {
-                            store.send(.view(.showConfig(true)))
+                            send(.showConfig(true))
                         }) {
                             Image(systemName: "gearshape")
                                 .resizable()
@@ -181,7 +189,7 @@ struct DirectVideoCallView: View {
                         .sheet(
                             isPresented: .init(
                                 get: { store.showConfig },
-                                set: { store.send(.view(.showConfig($0))) }
+                                set: { send(.showConfig($0)) }
                             )
                         ) {
                             ConfigPopupView(store: store)
@@ -201,7 +209,7 @@ struct DirectVideoCallView: View {
 
                 cornerOverlay(position: .bottomLeading) {
                     RulerDistanceView(distance: store.distanceFt) {
-                        store.send(.view(.updateDistanceRandom))
+                        send(.updateDistanceRandom)
                     }
                 }
 
@@ -211,8 +219,8 @@ struct DirectVideoCallView: View {
             }
             .animation(.easeInOut(duration: 0.3), value: store.showWifiDetails)
         }
-        .onAppear {
-            store.send(.view(.onAppear))
+        .task {
+            send(.task)
             logger.info("🎥 DirectVideoCallView: Video viewer started with WebRTC client")
             let client = WebRTCClientLive.shared.getClient()
             logger.info(
@@ -294,7 +302,7 @@ struct DirectVideoCallView: View {
             Divider()
             Text("Settings go here.")
             Button("Close") {
-                store.send(.view(.closeConfig))
+                send(.closeConfig)
             }
             .padding()
         }
@@ -322,7 +330,7 @@ struct DirectVideoCallView: View {
         // Use SF Symbol for wifi icon and simulate signal strength
         VStack {
             Button(action: {
-                store.send(.view(.toggleWifiDetails))
+                send(.toggleWifiDetails)
             }) {
                 Image(systemName: store.showWifiDetails ? "wifi.circle.fill" : "wifi")
                     .resizable()
@@ -353,7 +361,7 @@ struct DirectVideoCallView: View {
     @ViewBuilder
     func HumanPoseButton(store: StoreOf<DirectVideoCallFeature>) -> some View {
         Button(action: {
-            store.send(.view(.showHumanPose(true)))
+            send(.showHumanPose(true))
         }) {
             Image(systemName: "figure.run")
                 .resizable()
@@ -364,7 +372,7 @@ struct DirectVideoCallView: View {
         .popover(
             isPresented: .init(
                 get: { store.showHumanPose },
-                set: { store.send(.view(.showHumanPose($0))) }
+                set: { send(.showHumanPose($0)) }
             )
         ) {
             HumanPosePopoverView(store: store)
@@ -384,7 +392,7 @@ struct DirectVideoCallView: View {
                     .fontWeight(.medium)
                 Spacer()
                 Button("Close") {
-                    store.send(.view(.closeHumanPose))
+                    send(.closeHumanPose)
                 }
                 .font(.caption)
                 .foregroundColor(.blue)
@@ -466,7 +474,7 @@ struct DirectVideoCallView: View {
             VStack(spacing: 4) {
                 ForEach(DirectVideoCallFeature.State.AlertType.allCases, id: \.self) { alertType in
                     Button(action: {
-                        store.send(.view(.simulateAlert(alertType)))
+                        send(.simulateAlert(alertType))
                     }) {
                         HStack(spacing: 4) {
                             Circle()
@@ -604,7 +612,7 @@ struct DirectVideoCallView: View {
 
             // Close button
             Button(action: {
-                store.send(.view(.toggleWifiDetails))
+                send(.toggleWifiDetails)
             }) {
                 Image(systemName: "xmark.circle.fill")
                     .font(.title2)

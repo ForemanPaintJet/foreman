@@ -8,8 +8,8 @@
 import Combine
 import ComposableArchitecture
 import Foundation
-import MQTTNIO
 import MqttClientKit
+import MQTTNIO
 import NIOCore
 import OSLog
 import SwiftUI
@@ -57,7 +57,7 @@ struct WebRTCMqttFeature {
     }
 
     @CasePathable
-    enum Action: Equatable, BindableAction {
+    enum Action: Equatable, BindableAction, ComposableArchitecture.ViewAction {
         case view(ViewAction)
         case binding(BindingAction<State>)
         case _internal(InternalAction)
@@ -126,7 +126,6 @@ struct WebRTCMqttFeature {
             case confirmLeaveRoom
             case dismissError
         }
-
     }
 
     private enum CancelID {
@@ -148,10 +147,10 @@ struct WebRTCMqttFeature {
         case .binding:
             return .none
 
-        case let .view(viewAction):
+        case .view(let viewAction):
             return handleViewAction(into: &state, action: viewAction)
 
-        case let ._internal(internalAction):
+        case ._internal(let internalAction):
             return handleInternalAction(into: &state, action: internalAction)
 
         case .delegate:
@@ -228,9 +227,6 @@ struct WebRTCMqttFeature {
             return .none
 
         case .connectToBroker:
-            logger.info(
-                "🟠 [MQTT] Connecting to broker: address=\(state.mqttInfo.address), port=\(state.mqttInfo.port), clientID=\(state.mqttInfo.clientID)"
-            )
             guard
                 !state.mqttInfo.address.isEmpty,
                 !state.userId.isEmpty
@@ -240,6 +236,10 @@ struct WebRTCMqttFeature {
                         .errorOccurred("MQTT address, Room ID, and User ID are required")))
             }
             let info = state.mqttInfo
+
+            logger.info(
+                "🟠 [MQTT] Connecting to broker: address=\(info.address), port=\(info.port), clientID=\(info.clientID)"
+            )
 
             return .run { send in
                 await send(._internal(.setLoading(.connecting, true)))
@@ -256,7 +256,6 @@ struct WebRTCMqttFeature {
             return executeDisconnect(state: &state)
 
         case .joinRoom:
-            logger.info("🟠 [MQTT] userId=\(state.userId)")
             guard !state.userId.isEmpty else {
                 return .send(._internal(.errorOccurred("Room ID and User ID are required")))
             }
@@ -264,6 +263,8 @@ struct WebRTCMqttFeature {
                 return .send(._internal(.errorOccurred("Not connected to MQTT broker")))
             }
             let userId = state.userId
+            logger.info("🟠 [MQTT] userId=\(userId)")
+
             // Implement room join logic via MQTT topic subscription
             return .run { send in
                 await send(._internal(.setLoading(.joiningRoom, true)))
@@ -353,8 +354,7 @@ struct WebRTCMqttFeature {
             )
             let iceCandidate = ICECandidate(
                 type: "ice", clientId: state.userId,
-                candidate: .init(candidate: candidate, sdpMLineIndex: sdpMLineIndex, sdpMid: sdpMid)
-            )
+                candidate: .init(candidate: candidate, sdpMLineIndex: sdpMLineIndex, sdpMid: sdpMid))
             return .run { send in
                 await send(._internal(.setLoading(.sendingIceCandidate, true)))
                 do {
@@ -428,7 +428,7 @@ struct WebRTCMqttFeature {
                 do {
                     let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
                     if let json = json, let type = json["type"] as? String,
-                        let clientId = json["clientId"] as? String
+                       let clientId = json["clientId"] as? String
                     {
                         switch type {
                         case "offer":
@@ -455,8 +455,8 @@ struct WebRTCMqttFeature {
                             }
                         case "ice":
                             if let candidateObj = json["candidate"] as? [String: Any],
-                                let candidate = candidateObj["candidate"] as? String,
-                                let sdpMLineIndex = candidateObj["sdpMLineIndex"] as? Int
+                               let candidate = candidateObj["candidate"] as? String,
+                               let sdpMLineIndex = candidateObj["sdpMLineIndex"] as? Int
                             {
                                 let sdpMid: String? = candidateObj["sdpMid"] as? String
                                 let ice = ICECandidate(
@@ -656,6 +656,10 @@ struct WebRTCMqttFeature {
     private func executeDisconnect(state: inout State) -> Effect<Action> {
         let connectedUsers = state.connectedUsers
         let isJoinedToRoom = state.isJoinedToRoom
+
+        @Dependency(\.mqttClientKit) var mqttClientKit
+        @Dependency(\.webRTCClient) var webRTCClient
+
         return .run { send in
             do {
                 if isJoinedToRoom {
