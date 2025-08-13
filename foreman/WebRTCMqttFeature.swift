@@ -8,8 +8,8 @@
 import Combine
 import ComposableArchitecture
 import Foundation
-import MqttClientKit
 import MQTTNIO
+import MqttClientKit
 import NIOCore
 import OSLog
 import SwiftUI
@@ -335,7 +335,8 @@ struct WebRTCMqttFeature {
             )
             let iceCandidate = ICECandidate(
                 type: "ice", clientId: state.userId,
-                candidate: .init(candidate: candidate, sdpMLineIndex: sdpMLineIndex, sdpMid: sdpMid))
+                candidate: .init(candidate: candidate, sdpMLineIndex: sdpMLineIndex, sdpMid: sdpMid)
+            )
             return .run { send in
                 await send(._internal(.setLoading(.sendingIceCandidate, true)))
                 do {
@@ -409,7 +410,7 @@ struct WebRTCMqttFeature {
                 do {
                     let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
                     if let json = json, let type = json["type"] as? String,
-                       let clientId = json["clientId"] as? String
+                        let clientId = json["clientId"] as? String
                     {
                         switch type {
                         case "offer":
@@ -436,8 +437,8 @@ struct WebRTCMqttFeature {
                             }
                         case "ice":
                             if let candidateObj = json["candidate"] as? [String: Any],
-                               let candidate = candidateObj["candidate"] as? String,
-                               let sdpMLineIndex = candidateObj["sdpMLineIndex"] as? Int
+                                let candidate = candidateObj["candidate"] as? String,
+                                let sdpMLineIndex = candidateObj["sdpMLineIndex"] as? Int
                             {
                                 let sdpMid: String? = candidateObj["sdpMid"] as? String
                                 let ice = ICECandidate(

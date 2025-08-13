@@ -27,7 +27,6 @@ struct WebRTCMqttFeatureTests {
     func testBindingUpdates() async throws {
         let store = TestStore(
             initialState: WebRTCMqttFeature.State(), reducer: { WebRTCMqttFeature() })
-        
         await store.send(.binding(.set(\.mqttInfo.address, "192.168.1.100"))) {
             $0.mqttInfo.address = "192.168.1.100"
         }

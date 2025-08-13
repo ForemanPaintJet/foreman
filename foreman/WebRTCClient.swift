@@ -254,8 +254,12 @@ class WebRTCClient: NSObject, ObservableObject {
             logger.info("🔄 WebRTCClient: Setting local description (answer) for \(userId)")
             try await peerConnection.setLocalDescription(answer)
             logger.info("✅ WebRTCClient: Local description set for \(userId)")
-            logger.info("🧊 WebRTCClient: ICE gathering state after setting local description: ", peerConnection.iceGatheringState)
-            logger.info("🧊 WebRTCClient: ICE connection state after setting local description: ", peerConnection.iceConnectionState)
+            logger.info(
+                "🧊 WebRTCClient: ICE gathering state after setting local description: ",
+                peerConnection.iceGatheringState)
+            logger.info(
+                "🧊 WebRTCClient: ICE connection state after setting local description: ",
+                peerConnection.iceConnectionState)
 
             let webRTCAnswer = WebRTCAnswer(
                 sdp: answer.sdp, type: "answer", clientId: userId, videoSource: "")
@@ -266,8 +270,12 @@ class WebRTCClient: NSObject, ObservableObject {
             // Add a small delay to allow ICE gathering to start
             Task { [logger] in
                 try await Task.sleep(nanoseconds: 1_000_000_000)  // 1 second
-                logger.info("🧊 WebRTCClient: ICE gathering state after 1s: ", peerConnection.iceGatheringState)
-                logger.info("🧊 WebRTCClient: ICE connection state after 1s: ", peerConnection.iceConnectionState)
+                logger.info(
+                    "🧊 WebRTCClient: ICE gathering state after 1s: ",
+                    peerConnection.iceGatheringState)
+                logger.info(
+                    "🧊 WebRTCClient: ICE connection state after 1s: ",
+                    peerConnection.iceConnectionState)
             }
         } catch {
             logger.error("❌ WebRTCClient: Failed to handle remote offer from \(userId): \(error)")
@@ -323,7 +331,9 @@ class WebRTCClient: NSObject, ObservableObject {
 
     func addRemoteVideoTrack(_ track: RTCVideoTrack, for userId: String) {
         logger.info("📺 WebRTCClient: Adding remote video track for \(userId)")
-        logger.info("📺 WebRTCClient: Video track state - isEnabled: \(track.isEnabled), readyState: ", track.readyState)
+        logger.info(
+            "📺 WebRTCClient: Video track state - isEnabled: \(track.isEnabled), readyState: ",
+            track.readyState)
 
         // Check if we already have a video track for this user
         if remoteVideoTracks.contains(where: { $0.userId == userId }) {
@@ -428,9 +438,11 @@ class PeerConnectionDelegate: NSObject, RTCPeerConnectionDelegate {
         streams: [RTCMediaStream]
     ) {
         logger.info("📺 PeerConnection[\(self.userId)]: Modern track added via receiver")
-        logger.info("📺 PeerConnection[\(self.userId)]: Track kind: \(receiver.track?.kind ?? "unknown")")
         logger.info(
-            "📺 PeerConnection[\(self.userId)]: Track enabled: \(receiver.track?.isEnabled ?? false)")
+            "📺 PeerConnection[\(self.userId)]: Track kind: \(receiver.track?.kind ?? "unknown")")
+        logger.info(
+            "📺 PeerConnection[\(self.userId)]: Track enabled: \(receiver.track?.isEnabled ?? false)"
+        )
         logger.info("📺 PeerConnection[\(self.userId)]: Streams count: \(streams.count)")
 
         if let track = receiver.track, track.kind == "video",
@@ -461,7 +473,8 @@ class PeerConnectionDelegate: NSObject, RTCPeerConnectionDelegate {
     {
         logger.info("🧊 PeerConnection[\(self.userId)]: ICE candidate generated")
         logger.info("🧊 PeerConnection[\(self.userId)]: Candidate SDP: \(candidate.sdp)")
-        logger.info("🧊 PeerConnection[\(self.userId)]: SDP M-Line Index: \(candidate.sdpMLineIndex)")
+        logger.info(
+            "🧊 PeerConnection[\(self.userId)]: SDP M-Line Index: \(candidate.sdpMLineIndex)")
         logger.info("🧊 PeerConnection[\(self.userId)]: SDP MID: \(candidate.sdpMid ?? "nil")")
 
         Task { @MainActor in
