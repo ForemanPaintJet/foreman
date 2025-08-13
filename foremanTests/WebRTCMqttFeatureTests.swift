@@ -22,15 +22,19 @@ struct WebRTCMqttFeatureTests {
         #expect(state.mqttInfo.clientID == state.userId)
     }
 
-    @Test("update MQTT address and port")
-    func testUpdateMqttAddressAndPort() async throws {
+    @Test("binding updates MQTT info and userId")
+    func testBindingUpdates() async throws {
         let store = TestStore(
             initialState: WebRTCMqttFeature.State(), reducer: { WebRTCMqttFeature() })
-        await store.send(.view(.updateMqttAddress("192.168.1.100"))) {
+        await store.send(.binding(\.mqttInfo.address), "192.168.1.100") {
             $0.mqttInfo.address = "192.168.1.100"
         }
-        await store.send(.view(.updateMqttPort(1884))) {
+        await store.send(.binding(\.mqttInfo.port), 1884) {
             $0.mqttInfo.port = 1884
+        }
+        await store.send(.binding(\.userId), "testUser") {
+            $0.userId = "testUser"
+            $0.mqttInfo.clientID = "testUser"
         }
     }
 
