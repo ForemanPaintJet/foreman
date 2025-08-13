@@ -35,7 +35,7 @@ struct WebRTCMqttFeature {
         var loadingItems: Set<LoadingItem> = []
         var connectionStatus: MqttClientKit.State = .idle
         var mqttInfo: MqttClientKitInfo = .init(
-            address: "192.168.0.137", port: 1883, clientID: "")
+            address: "192.168.1.124", port: 1883, clientID: "")
 
         var userId: String = ""
         var connectedUsers: [String] = []
@@ -68,10 +68,6 @@ struct WebRTCMqttFeature {
         enum ViewAction: Equatable {
             case task
             case teardown
-            case updateMqttAddress(String)
-            case updateMqttPort(Int)
-            case updateRoomId(String)
-            case updateUserId(String)
             case connectToBroker
             case disconnect
             case joinRoom
@@ -144,6 +140,10 @@ struct WebRTCMqttFeature {
 
     func core(into state: inout State, action: Action) -> Effect<Action> {
         switch action {
+        case .binding(\.userId):
+            state.mqttInfo.clientID = state.userId
+            return .none
+            
         case .binding:
             return .none
 
@@ -182,7 +182,6 @@ struct WebRTCMqttFeature {
             logger.info(
                 "🟠 [WebRTCMqttFeature] task: Generating default userId and subscribing to streams")
             state.generateDefaultUserId()
-            let info = state.mqttInfo
             return .run { send in
                 // Subscribe to MQTT streams
                 await withTaskGroup(of: Void.self) { group in
@@ -208,23 +207,6 @@ struct WebRTCMqttFeature {
 
         case .teardown:
             return .cancel(id: CancelID.stream)
-
-        case .updateMqttAddress(let address):
-            state.mqttInfo.address = address
-            return .none
-
-        case .updateMqttPort(let port):
-            state.mqttInfo.port = port
-            return .none
-
-        case .updateRoomId(let roomId):
-            //            state.roomId = roomId
-            return .none
-
-        case .updateUserId(let userId):
-            state.userId = userId
-            state.mqttInfo.clientID = userId
-            return .none
 
         case .connectToBroker:
             guard

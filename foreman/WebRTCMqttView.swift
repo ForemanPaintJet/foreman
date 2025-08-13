@@ -38,17 +38,17 @@ struct WebRTCMqttView: View {
                                     .font(.headline)
                                 TextField(
                                     "Address",
-                                    text: $store.mqttInfo.address.sending(\.view.updateMqttAddress)
+                                    text: $store.mqttInfo.address
                                 )
                                 .textFieldStyle(RoundedBorderTextFieldStyle())
                                 TextField(
                                     "Port",
-                                    value: $store.mqttInfo.port.sending(\.view.updateMqttPort),
+                                    value: $store.mqttInfo.port,
                                     format: .number
                                 )
                                 .textFieldStyle(RoundedBorderTextFieldStyle())
                                 TextField(
-                                    "User ID", text: $store.userId.sending(\.view.updateUserId)
+                                    "User ID", text: $store.userId
                                 )
                                 .textFieldStyle(RoundedBorderTextFieldStyle())
 

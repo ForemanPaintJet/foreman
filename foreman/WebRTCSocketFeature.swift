@@ -60,9 +60,6 @@ struct WebRTCSocketFeature {
         enum ViewAction: Equatable {
             case task
             case teardown
-            case updateServerURL(String)
-            case updateRoomId(String)
-            case updateUserId(String)
             case connectToServer
             case disconnect
             case joinRoom
@@ -235,18 +232,6 @@ struct WebRTCSocketFeature {
 
         case .teardown:
             return .cancel(id: "SocketStreams")
-
-        case .updateServerURL(let url):
-            state.serverURL = url
-            return .none
-
-        case .updateRoomId(let roomId):
-            state.roomId = roomId
-            return .none
-
-        case .updateUserId(let userId):
-            state.userId = userId
-            return .none
 
         case .connectToServer:
             guard !state.serverURL.isEmpty && !state.roomId.isEmpty && !state.userId.isEmpty else {

@@ -70,7 +70,7 @@ struct WebRTCSocketView: View {
 
                     TextField(
                         "ws://192.168.1.105:4000",
-                        text: $store.serverURL.sending(\.view.updateServerURL)
+                        text: $store.serverURL
                     )
                     .textFieldStyle(RoundedBorderTextFieldStyle())
                     .disabled(store.connectionStatus != .disconnected)
@@ -83,7 +83,7 @@ struct WebRTCSocketView: View {
                         .fontWeight(.medium)
                         .foregroundColor(themeConfig.colorTheme.secondary)
 
-                    TextField("Enter room ID", text: $store.roomId.sending(\.view.updateRoomId))
+                    TextField("Enter room ID", text: $store.roomId)
                         .textFieldStyle(RoundedBorderTextFieldStyle())
                         .disabled(store.connectionStatus != .disconnected)
                 }
@@ -95,7 +95,7 @@ struct WebRTCSocketView: View {
                         .fontWeight(.medium)
                         .foregroundColor(themeConfig.colorTheme.secondary)
 
-                    TextField("Your user ID", text: $store.userId.sending(\.view.updateUserId))
+                    TextField("Your user ID", text: $store.userId)
                         .textFieldStyle(RoundedBorderTextFieldStyle())
                         .disabled(store.connectionStatus != .disconnected)
                 }
