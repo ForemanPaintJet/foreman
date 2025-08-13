@@ -143,7 +143,6 @@ struct WebRTCMqttFeature {
         case .binding(\.userId):
             state.mqttInfo.clientID = state.userId
             return .none
-
         case .binding:
             return .none
 
