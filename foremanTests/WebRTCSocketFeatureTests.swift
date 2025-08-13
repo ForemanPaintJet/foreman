@@ -233,6 +233,23 @@ struct WebRTCSocketFeatureTests {
     }
   }
 
+<<<<<<< HEAD
+=======
+  @Test("alert actions")
+  func testAlertActions() async throws {
+    let store = TestStore(
+      initialState: WebRTCSocketFeature.State(lastError: "Test error"),
+      reducer: { WebRTCSocketFeature() })
+
+    await store.send(.alert(.presented(.confirmDisconnect)))
+    await store.send(.alert(.presented(.confirmLeaveRoom)))
+    await store.send(.alert(.presented(.dismissError))) {
+      $0.lastError = nil
+    }
+    await store.send(.alert(.dismiss))
+  }
+
+>>>>>>> 1413385 (feat: Add comprehensive unit tests and improve TCA binding patterns)
   @Test("delegate actions do not change state")
   func testDelegateActions() async throws {
     let store = TestStore(
@@ -244,4 +261,8 @@ struct WebRTCSocketFeatureTests {
     await store.send(.delegate(.didLeaveRoom))
     await store.send(.delegate(.connectionError("test error")))
   }
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> 1413385 (feat: Add comprehensive unit tests and improve TCA binding patterns)
