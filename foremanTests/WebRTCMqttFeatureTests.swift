@@ -13,6 +13,7 @@ import Testing
 @testable import foreman
 
 @Suite("WebRTCMqttFeature")
+@MainActor
 struct WebRTCMqttFeatureTests {
     @Test("generateDefaultUserId sets userId and clientID")
     func testGenerateDefaultUserId() async throws {
@@ -26,13 +27,16 @@ struct WebRTCMqttFeatureTests {
     func testBindingUpdates() async throws {
         let store = TestStore(
             initialState: WebRTCMqttFeature.State(), reducer: { WebRTCMqttFeature() })
-        await store.send(.binding(\.mqttInfo.address), "192.168.1.100") {
+        
+        await store.send(.binding(.set(\.mqttInfo.address, "192.168.1.100"))) {
             $0.mqttInfo.address = "192.168.1.100"
         }
-        await store.send(.binding(\.mqttInfo.port), 1884) {
+        
+        await store.send(.binding(.set(\.mqttInfo.port, 1884))) {
             $0.mqttInfo.port = 1884
         }
-        await store.send(.binding(\.userId), "testUser") {
+        
+        await store.send(.binding(.set(\.userId, "testUser"))) {
             $0.userId = "testUser"
             $0.mqttInfo.clientID = "testUser"
         }
@@ -76,5 +80,105 @@ struct WebRTCMqttFeatureTests {
         await store.send(._internal(.setLoading(.connecting, false))) {
             $0.loadingItems.remove(.connecting)
         }
+    }
+
+    @Test("error occurred updates lastError")
+    func testErrorOccurred() async throws {
+        let store = TestStore(
+            initialState: WebRTCMqttFeature.State(), reducer: { WebRTCMqttFeature() })
+        
+        await store.send(._internal(.errorOccurred("Connection failed"))) {
+            $0.lastError = "Connection failed"
+        }
+        
+        await clock.advance(by: .seconds(1))
+        
+        await store.receive(.delegate(.connectionError("Connection failed")))
+    }
+
+    @Test("message received appends to messages and limits to 50")
+    func testMessageReceived() async throws {
+        // Create 50 existing messages
+        let existingMessages = (0..<50).map { i in
+            MQTTPublishInfo(
+                qos: .atLeastOnce, retain: false, topicName: "test\(i)", payload: ByteBuffer(),
+                properties: .init([]))
+        }
+        
+        let store = TestStore(
+            initialState: WebRTCMqttFeature.State(messages: existingMessages),
+            reducer: { WebRTCMqttFeature() })
+        
+        let newMessage = MQTTPublishInfo(
+            qos: .atLeastOnce, retain: false, topicName: "newTest", payload: ByteBuffer(),
+            properties: .init([]))
+        
+        await store.send(._internal(.mqttMessageReceived(newMessage))) {
+            // Should remove first message and append new one
+            $0.messages.removeFirst()
+            $0.messages.append(newMessage)
+            #expect($0.messages.count == 50)
+        }
+    }
+
+    @Test("offer received updates pendingOffers")
+    func testOfferReceived() async throws {
+        let store = TestStore(
+            initialState: WebRTCMqttFeature.State(), reducer: { WebRTCMqttFeature() })
+        
+        let offer = WebRTCOffer(sdp: "test-sdp", type: "offer", clientId: "client1", videoSource: "")
+        
+        await store.send(._internal(.offerReceived(offer))) {
+            $0.pendingOffers.append(offer)
+        }
+    }
+
+    @Test("answer received updates pendingAnswers")
+    func testAnswerReceived() async throws {
+        let store = TestStore(
+            initialState: WebRTCMqttFeature.State(), reducer: { WebRTCMqttFeature() })
+        
+        let answer = WebRTCAnswer(sdp: "test-sdp", type: "answer", clientId: "client1", videoSource: "")
+        
+        await store.send(._internal(.answerReceived(answer))) {
+            $0.pendingAnswers.append(answer)
+        }
+    }
+
+    @Test("ice candidate received updates pendingIceCandidates")
+    func testIceCandidateReceived() async throws {
+        let store = TestStore(
+            initialState: WebRTCMqttFeature.State(), reducer: { WebRTCMqttFeature() })
+        
+        let iceCandidate = ICECandidate(
+            type: "ice", clientId: "client1",
+            candidate: .init(candidate: "test-candidate", sdpMLineIndex: 0, sdpMid: "0"))
+        
+        await store.send(._internal(.iceCandidateReceived(iceCandidate))) {
+            $0.pendingIceCandidates.append(iceCandidate)
+        }
+    }
+
+    @Test("alert actions")
+    func testAlertActions() async throws {
+        let store = TestStore(
+            initialState: WebRTCMqttFeature.State(lastError: "Test error"),
+            reducer: { WebRTCMqttFeature() })
+        
+        await store.send(.alert(.presented(.confirmDisconnect)))
+        await store.send(.alert(.presented(.dismissError))) {
+            $0.lastError = nil
+        }
+        await store.send(.alert(.dismiss))
+    }
+
+    @Test("delegate actions do not change state")
+    func testDelegateActions() async throws {
+        let store = TestStore(
+            initialState: WebRTCMqttFeature.State(), reducer: { WebRTCMqttFeature() })
+        
+        await store.send(.delegate(.didConnect))
+        await store.send(.delegate(.didDisconnect))
+        await store.send(.delegate(.connectionError("test")))
     }
 }

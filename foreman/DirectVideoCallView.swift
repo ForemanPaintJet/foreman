@@ -187,10 +187,7 @@ struct DirectVideoCallView: View {
                                 .padding(8)
                         }
                         .sheet(
-                            isPresented: .init(
-                                get: { store.showConfig },
-                                set: { send(.showConfig($0)) }
-                            )
+                            isPresented: $store.showConfig
                         ) {
                             ConfigPopupView(store: store)
                         }
@@ -370,10 +367,7 @@ struct DirectVideoCallView: View {
                 .padding(8)
         }
         .popover(
-            isPresented: .init(
-                get: { store.showHumanPose },
-                set: { send(.showHumanPose($0)) }
-            )
+            isPresented: $store.showHumanPose
         ) {
             HumanPosePopoverView(store: store)
         }
