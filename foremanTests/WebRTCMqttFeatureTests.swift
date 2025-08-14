@@ -27,10 +27,6 @@ struct WebRTCMqttFeatureTests {
     func testBindingUpdates() async throws {
         let store = TestStore(
             initialState: WebRTCMqttFeature.State(), reducer: { WebRTCMqttFeature() })
-<<<<<<< HEAD
-=======
-        
->>>>>>> 1413385 (feat: Add comprehensive unit tests and improve TCA binding patterns)
         await store.send(.binding(.set(\.mqttInfo.address, "192.168.1.100"))) {
             $0.mqttInfo.address = "192.168.1.100"
         }
@@ -94,11 +90,6 @@ struct WebRTCMqttFeatureTests {
             $0.lastError = "Connection failed"
         }
         
-<<<<<<< HEAD
-=======
-        await clock.advance(by: .seconds(1))
-        
->>>>>>> 1413385 (feat: Add comprehensive unit tests and improve TCA binding patterns)
         await store.receive(.delegate(.connectionError("Connection failed")))
     }
 
@@ -130,22 +121,17 @@ struct WebRTCMqttFeatureTests {
     @Test("offer received updates pendingOffers")
     func testOfferReceived() async throws {
         let store = TestStore(
-<<<<<<< HEAD
             initialState: WebRTCMqttFeature.State(), reducer: { WebRTCMqttFeature() }){
                 $0.webRTCClient.handleRemoteOffer = { _ in
                     throw Unimplemented("")
                 }
             }
-=======
-            initialState: WebRTCMqttFeature.State(), reducer: { WebRTCMqttFeature() })
->>>>>>> 1413385 (feat: Add comprehensive unit tests and improve TCA binding patterns)
         
         let offer = WebRTCOffer(sdp: "test-sdp", type: "offer", clientId: "client1", videoSource: "")
         
         await store.send(._internal(.offerReceived(offer))) {
             $0.pendingOffers.append(offer)
         }
-<<<<<<< HEAD
         
         let errorString = "Failed to handle remote offer: The operation couldn’t be completed. (DependenciesMacros.Unimplemented error 1.)"
         
@@ -154,29 +140,22 @@ struct WebRTCMqttFeatureTests {
         }
         
         await store.receive(.delegate(.connectionError(errorString)))
-=======
->>>>>>> 1413385 (feat: Add comprehensive unit tests and improve TCA binding patterns)
     }
 
     @Test("answer received updates pendingAnswers")
     func testAnswerReceived() async throws {
         let store = TestStore(
-<<<<<<< HEAD
             initialState: WebRTCMqttFeature.State(), reducer: { WebRTCMqttFeature() }) {
                 $0.webRTCClient.handleRemoteAnswer = { _ in
                     throw Unimplemented("")
                 }
             }
-=======
-            initialState: WebRTCMqttFeature.State(), reducer: { WebRTCMqttFeature() })
->>>>>>> 1413385 (feat: Add comprehensive unit tests and improve TCA binding patterns)
         
         let answer = WebRTCAnswer(sdp: "test-sdp", type: "answer", clientId: "client1", videoSource: "")
         
         await store.send(._internal(.answerReceived(answer))) {
             $0.pendingAnswers.append(answer)
         }
-<<<<<<< HEAD
         
         let errorString = "Failed to handle remote answer: The operation couldn’t be completed. (DependenciesMacros.Unimplemented error 1.)"
         
@@ -185,23 +164,16 @@ struct WebRTCMqttFeatureTests {
         }
         
         await store.receive(.delegate(.connectionError(errorString)))
-=======
->>>>>>> 1413385 (feat: Add comprehensive unit tests and improve TCA binding patterns)
     }
 
     @Test("ice candidate received updates pendingIceCandidates")
     func testIceCandidateReceived() async throws {
         let store = TestStore(
-<<<<<<< HEAD
             initialState: WebRTCMqttFeature.State(), reducer: { WebRTCMqttFeature() }) {
                 $0.webRTCClient.handleRemoteIceCandidate = { _ in
                     throw Unimplemented("")
                 }
             }
-=======
-            initialState: WebRTCMqttFeature.State(), reducer: { WebRTCMqttFeature() })
-        
->>>>>>> 1413385 (feat: Add comprehensive unit tests and improve TCA binding patterns)
         let iceCandidate = ICECandidate(
             type: "ice", clientId: "client1",
             candidate: .init(candidate: "test-candidate", sdpMLineIndex: 0, sdpMid: "0"))
@@ -209,7 +181,6 @@ struct WebRTCMqttFeatureTests {
         await store.send(._internal(.iceCandidateReceived(iceCandidate))) {
             $0.pendingIceCandidates.append(iceCandidate)
         }
-<<<<<<< HEAD
         
         let errorString = "Failed to handle remote ICE candidate: The operation couldn’t be completed. (DependenciesMacros.Unimplemented error 1.)"
         
@@ -218,21 +189,6 @@ struct WebRTCMqttFeatureTests {
         }
         
         await store.receive(.delegate(.connectionError(errorString)))
-=======
-    }
-
-    @Test("alert actions")
-    func testAlertActions() async throws {
-        let store = TestStore(
-            initialState: WebRTCMqttFeature.State(lastError: "Test error"),
-            reducer: { WebRTCMqttFeature() })
-        
-        await store.send(.alert(.presented(.confirmDisconnect)))
-        await store.send(.alert(.presented(.dismissError))) {
-            $0.lastError = nil
-        }
-        await store.send(.alert(.dismiss))
->>>>>>> 1413385 (feat: Add comprehensive unit tests and improve TCA binding patterns)
     }
 
     @Test("delegate actions do not change state")
