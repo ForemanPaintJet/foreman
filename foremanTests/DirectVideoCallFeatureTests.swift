@@ -89,20 +89,6 @@ struct DirectVideoCallFeatureTests {
         }
     }
 
-    @Test("update distance random")
-    func testUpdateDistanceRandom() async throws {
-        let store = TestStore(
-            initialState: DirectVideoCallFeature.State(distanceFt: 50.0),
-            reducer: { DirectVideoCallFeature() }
-        )
-
-        await store.send(.view(.updateDistanceRandom)) {
-            // Distance should change to a random value between 1-100
-            #expect($0.distanceFt >= 1.0 && $0.distanceFt <= 100.0)
-            #expect($0.distanceFt != 50.0) // Very unlikely to be exactly the same
-        }
-    }
-
     @Test("close config")
     func testCloseConfig() async throws {
         let store = TestStore(

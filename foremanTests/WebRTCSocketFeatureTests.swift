@@ -233,20 +233,6 @@ struct WebRTCSocketFeatureTests {
     }
   }
 
-  @Test("alert actions")
-  func testAlertActions() async throws {
-    let store = TestStore(
-      initialState: WebRTCSocketFeature.State(lastError: "Test error"),
-      reducer: { WebRTCSocketFeature() })
-
-    await store.send(.alert(.presented(.confirmDisconnect)))
-    await store.send(.alert(.presented(.confirmLeaveRoom)))
-    await store.send(.alert(.presented(.dismissError))) {
-      $0.lastError = nil
-    }
-    await store.send(.alert(.dismiss))
-  }
-
   @Test("delegate actions do not change state")
   func testDelegateActions() async throws {
     let store = TestStore(

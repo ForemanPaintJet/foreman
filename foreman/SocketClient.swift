@@ -493,6 +493,7 @@ class SocketClient: ObservableObject {
 
 // MARK: - TCA Dependency
 
+@DependencyClient
 struct SocketClientDependency {
     var connect: @Sendable (URL) async throws -> Void
     var disconnect: @Sendable () async throws -> Void
@@ -501,12 +502,17 @@ struct SocketClientDependency {
     var sendOffer: @Sendable (WebRTCOffer) async throws -> Void
     var sendAnswer: @Sendable (WebRTCAnswer) async throws -> Void
     var sendIceCandidate: @Sendable (ICECandidate) async throws -> Void
-    var connectionStatusStream: @Sendable () -> AsyncStream<ConnectionStatus>
-    var messageStream: @Sendable () -> AsyncStream<SocketMessage>
-    var offerStream: @Sendable () -> AsyncStream<WebRTCOffer>
-    var answerStream: @Sendable () -> AsyncStream<WebRTCAnswer>
-    var iceCandidateStream: @Sendable () -> AsyncStream<ICECandidate>
-    var roomUpdateStream: @Sendable () -> AsyncStream<RoomInfo>
+    var connectionStatusStream: @Sendable () -> AsyncStream<ConnectionStatus> = { AsyncStream.never }
+    var messageStream: @Sendable () -> AsyncStream<SocketMessage> = { AsyncStream.never }
+    var offerStream: @Sendable () -> AsyncStream<WebRTCOffer> = { AsyncStream.never }
+    var answerStream: @Sendable () -> AsyncStream<WebRTCAnswer> = { AsyncStream.never }
+    var iceCandidateStream: @Sendable () -> AsyncStream<ICECandidate> = { AsyncStream.never }
+    var roomUpdateStream: @Sendable () -> AsyncStream<RoomInfo> = { AsyncStream.never }
+}
+
+
+extension SocketClientDependency: TestDependencyKey {
+    static let testValue = Self()
 }
 
 extension SocketClientDependency: DependencyKey {

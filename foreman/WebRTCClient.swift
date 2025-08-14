@@ -546,8 +546,9 @@ enum WebRTCError: Error, LocalizedError {
 
 // MARK: - TCA Dependency
 
+@DependencyClient
 struct WebRTCClientDependency {
-    var createPeerConnection: @Sendable (String) async -> Bool
+    var createPeerConnection: @Sendable (String) async -> Bool = { _ in false }
     var removePeerConnection: @Sendable (String) async -> Void
     var createOffer: @Sendable (String) async throws -> Void
     var handleRemoteOffer: @Sendable (WebRTCOffer) async throws -> Void
@@ -556,10 +557,14 @@ struct WebRTCClientDependency {
     var toggleAudio: @Sendable () -> Void
     var toggleVideo: @Sendable () -> Void
     var switchCamera: @Sendable () -> Void
-    var offerStream: @Sendable () -> AsyncStream<WebRTCOffer>
-    var answerStream: @Sendable () -> AsyncStream<WebRTCAnswer>
-    var iceCandidateStream: @Sendable () -> AsyncStream<ICECandidate>
-    var getClient: @Sendable () async -> WebRTCClient
+    var offerStream: @Sendable () -> AsyncStream<WebRTCOffer> = { AsyncStream.never }
+    var answerStream: @Sendable () -> AsyncStream<WebRTCAnswer> = { AsyncStream.never }
+    var iceCandidateStream: @Sendable () -> AsyncStream<ICECandidate> = { AsyncStream.never }
+    var getClient: @Sendable () async -> WebRTCClient = { await MainActor.run { WebRTCClient() } }
+}
+
+extension WebRTCClientDependency: TestDependencyKey {
+    static let testValue = Self()
 }
 
 extension WebRTCClientDependency: DependencyKey {
