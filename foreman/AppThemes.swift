@@ -5,22 +5,26 @@
 //  Created by Theme System on 2025/7/9.
 //
 
-import SwiftUI
-import ForemanThemeCore
 import ComposableArchitecture
+import ForemanThemeCore
+import SwiftUI
 
 // MARK: - Theme Dependency
 
 /// Theme service protocol following TCA dependency pattern
 protocol ThemeServiceProtocol {
-    func themeConfiguration(for theme: AppTheme, variant: ThemeVariant) -> ThemeConfiguration<DynamicTheme>
+    func themeConfiguration(for theme: AppTheme, variant: ThemeVariant) -> ThemeConfiguration<
+        DynamicTheme
+    >
     func availableThemes() -> [AppTheme]
     func availableVariants() -> [ThemeVariant]
 }
 
 /// Concrete implementation of the theme service
 struct ThemeService: ThemeServiceProtocol {
-    func themeConfiguration(for theme: AppTheme, variant: ThemeVariant) -> ThemeConfiguration<DynamicTheme> {
+    func themeConfiguration(for theme: AppTheme, variant: ThemeVariant) -> ThemeConfiguration<
+        DynamicTheme
+    > {
         switch theme {
         case .orange:
             return ThemeFactory.orange(variant: variant)
@@ -30,11 +34,11 @@ struct ThemeService: ThemeServiceProtocol {
             return ThemeFactory.blue(variant: variant)
         }
     }
-    
+
     func availableThemes() -> [AppTheme] {
         AppTheme.allCases
     }
-    
+
     func availableVariants() -> [ThemeVariant] {
         ThemeVariant.allCases
     }
@@ -60,15 +64,17 @@ extension DependencyValues {
 
 /// Mock implementation for testing
 struct MockThemeService: ThemeServiceProtocol {
-    func themeConfiguration(for theme: AppTheme, variant: ThemeVariant) -> ThemeConfiguration<DynamicTheme> {
+    func themeConfiguration(for theme: AppTheme, variant: ThemeVariant) -> ThemeConfiguration<
+        DynamicTheme
+    > {
         // Return a simple mock theme for testing
         ThemeFactory.orange(variant: .vibrant)
     }
-    
+
     func availableThemes() -> [AppTheme] {
         [.orange]
     }
-    
+
     func availableVariants() -> [ThemeVariant] {
         [.vibrant]
     }
@@ -81,12 +87,12 @@ enum AppTheme: String, CaseIterable, Hashable {
     case orange = "Orange"
     case green = "Green"
     case blue = "Blue"
-    
+
     /// The display name for the theme
     var displayName: String {
         return rawValue
     }
-    
+
     /// Icon representation for the theme
     var icon: String {
         switch self {

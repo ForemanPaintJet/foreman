@@ -7,16 +7,22 @@
 
 import AVFoundation
 import Foundation
+import OSLog
 
 class PermissionsHelper {
     static let shared = PermissionsHelper()
+    private let logger = Logger(subsystem: "foreman", category: "PermissionsHelper")
 
     private init() {}
 
     func requestCameraPermission() async -> Bool {
         return await withCheckedContinuation { continuation in
-            AVCaptureDevice.requestAccess(for: .video) { granted in
-                print(granted ? "✅ Camera permission granted" : "❌ Camera permission denied")
+            AVCaptureDevice.requestAccess(for: .video) { [logger] granted in
+                if granted {
+                    logger.info("✅ Camera permission granted")
+                } else {
+                    logger.error("❌ Camera permission denied")
+                }
                 continuation.resume(returning: granted)
             }
         }
@@ -24,9 +30,12 @@ class PermissionsHelper {
 
     func requestMicrophonePermission() async -> Bool {
         return await withCheckedContinuation { continuation in
-            AVCaptureDevice.requestAccess(for: .audio) { granted in
-                print(
-                    granted ? "✅ Microphone permission granted" : "❌ Microphone permission denied")
+            AVCaptureDevice.requestAccess(for: .audio) { [logger] granted in
+                if granted {
+                    logger.info("✅ Microphone permission granted")
+                } else {
+                    logger.error("❌ Microphone permission denied")
+                }
                 continuation.resume(returning: granted)
             }
         }

@@ -13,6 +13,7 @@ import Foundation
 ///     enum DelegateAction: Equatable {
 ///         case notifyLoginSuccess
 ///     }
+///     
 ///
 ///     enum InternalAction: Equatable {
 ///         case loginResult(Result<String, NSError>)

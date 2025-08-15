@@ -6,14 +6,14 @@ import SwiftUI
 /// A reusable animated mesh gradient background that can be used across the app
 struct AnimatedMeshBackground: View {
     @State private var animate = false
-    
+
     // Configuration
     private let themeConfig: ThemeConfiguration<DynamicTheme>
     private let meshWidth: Int
     private let meshHeight: Int
-    
+
     // MARK: - Initializers
-    
+
     /// Creates a background with default orange theme
     init() {
         self.themeConfig = ThemeFactory.orange()
@@ -21,7 +21,7 @@ struct AnimatedMeshBackground: View {
         self.meshWidth = 3
         self.meshHeight = 4
     }
-    
+
     /// Creates a background with custom theme configuration
     init(themeConfig: ThemeConfiguration<DynamicTheme>) {
         self.themeConfig = themeConfig
@@ -31,7 +31,7 @@ struct AnimatedMeshBackground: View {
         self.meshWidth = dimensions.width
         self.meshHeight = dimensions.height
     }
-    
+
     /// Creates a background with custom theme and mesh dimensions
     init(
         themeConfig: ThemeConfiguration<DynamicTheme>,
@@ -42,9 +42,9 @@ struct AnimatedMeshBackground: View {
         self.meshWidth = meshWidth
         self.meshHeight = meshHeight
     }
-    
+
     // MARK: - Body
-    
+
     var body: some View {
         MeshGradient(
             width: meshWidth,
@@ -67,9 +67,9 @@ struct AnimatedMeshBackground: View {
         }
         .ignoresSafeArea(.all)
     }
-    
+
     // MARK: - Private Methods
-    
+
     /// Calculates optimal mesh dimensions based on number of colors
     private static func calculateMeshDimensions(for colorCount: Int) -> (width: Int, height: Int) {
         // ForemanThemeCore provides 12 colors in a 3x4 arrangement
@@ -90,15 +90,15 @@ struct AnimatedMeshBackground: View {
             // For any other count, try to make it roughly rectangular
             let sqrt = Int(sqrt(Double(colorCount)))
             let width = sqrt
-            let height = (colorCount + width - 1) / width // Ceiling division
+            let height = (colorCount + width - 1) / width  // Ceiling division
             return (width: width, height: height)
         }
     }
-    
+
     /// Generates mesh points based on dimensions to match color count
     private func generateMeshPoints() -> [SIMD2<Float>] {
         // Generate points in row-major order to match color array
-        
+
         (0..<meshHeight).flatMap { y in
             (0..<meshWidth).map { x in
                 let fx = Float(x) / Float(meshWidth - 1)
@@ -113,7 +113,9 @@ struct AnimatedMeshBackground: View {
 
 extension AnimatedMeshBackground {
     /// Creates a background with a specific theme (auto-calculates mesh dimensions)
-    static func withTheme(_ theme: AppTheme, variant: ThemeVariant = .vibrant) -> AnimatedMeshBackground {
+    static func withTheme(_ theme: AppTheme, variant: ThemeVariant = .vibrant)
+        -> AnimatedMeshBackground
+    {
         let config: ThemeConfiguration<DynamicTheme>
         switch theme {
         case .orange:
@@ -125,15 +127,19 @@ extension AnimatedMeshBackground {
         }
         return AnimatedMeshBackground(themeConfig: config)
     }
-    
+
     /// Creates a background with a custom base color (auto-calculates mesh dimensions)
-    static func withColor(_ color: Color, variant: ThemeVariant = .vibrant) -> AnimatedMeshBackground {
+    static func withColor(_ color: Color, variant: ThemeVariant = .vibrant)
+        -> AnimatedMeshBackground
+    {
         let config = ThemeFactory.dynamic(baseColor: color, variant: variant)
         return AnimatedMeshBackground(themeConfig: config)
     }
-    
+
     /// Creates a full screen background with higher mesh density
-    static func fullScreen(theme: AppTheme = .orange, variant: ThemeVariant = .vibrant) -> AnimatedMeshBackground {
+    static func fullScreen(theme: AppTheme = .orange, variant: ThemeVariant = .vibrant)
+        -> AnimatedMeshBackground
+    {
         let config: ThemeConfiguration<DynamicTheme>
         switch theme {
         case .orange:
@@ -152,35 +158,35 @@ extension AnimatedMeshBackground {
 
 /*
  Usage Examples:
- 
+
  // Default background (auto-calculated mesh based on 12 colors = 3x4)
  AnimatedMeshBackground()
- 
+
  // Auto-calculated mesh dimensions based on theme colors
  AnimatedMeshBackground.withTheme(.green, variant: .dark)
- 
+
  // Custom color (auto-calculated mesh)
  AnimatedMeshBackground.withColor(.purple)
- 
+
  // Full screen with higher density (4x5 mesh for smoother gradients)
  AnimatedMeshBackground.fullScreen()
- 
+
  // Manual mesh control (if you need specific dimensions)
  AnimatedMeshBackground(
      themeConfig: ThemeFactory.orange(),
      meshWidth: 3,
      meshHeight: 4
  )
- 
+
  // In a view as background:
  ZStack {
      AnimatedMeshBackground() // Automatically uses 3x4 for 12 colors
-     
+
      VStack {
          Text("Your content here")
      }
  }
- 
+
  Note: The mesh dimensions are automatically calculated based on the number of
  colors in themeConfig.meshColors. ForemanThemeCore provides 12 colors, so
  the optimal mesh is 3x4 (12 grid squares requiring 4x5 = 20 points).
@@ -207,13 +213,13 @@ extension AnimatedMeshBackground {
 #Preview("With Content") {
     ZStack {
         AnimatedMeshBackground()
-        
+
         VStack(spacing: 20) {
             Text("Foreman")
                 .font(.largeTitle)
                 .fontWeight(.bold)
                 .foregroundColor(.white)
-            
+
             Text("Beautiful mesh gradient background")
                 .font(.headline)
                 .foregroundColor(.white.opacity(0.8))

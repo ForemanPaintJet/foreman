@@ -6,25 +6,26 @@
 //
 
 import ComposableArchitecture
-import SwiftUI
 import ForemanThemeCore
+import SwiftUI
 
+@ViewAction(for: WebRTCSocketFeature.self)
 struct WebRTCSocketView: View {
     @Bindable var store: StoreOf<WebRTCSocketFeature>
     @Dependency(\.themeService) var themeService
-    
+
     // Orange theme configuration
     private var themeConfig: ThemeConfiguration<DynamicTheme> {
         themeService.themeConfiguration(for: .orange, variant: .vibrant)
     }
-    
+
     var body: some View {
         NavigationStack {
             ZStack {
                 // Orange themed background
                 themeConfig.colorTheme.background
                     .ignoresSafeArea()
-                
+
                 ScrollView {
                     LazyVStack(spacing: 20) {
                         connectionSection
@@ -36,7 +37,7 @@ struct WebRTCSocketView: View {
                     }
                     .padding()
                 }
-                
+
                 if store.isJoinedToRoom {
                     // Video Viewer View
                     VideoCallViewWrapper(store: store)
@@ -45,14 +46,11 @@ struct WebRTCSocketView: View {
             .navigationTitle("WebRTC Socket")
             .navigationBarTitleDisplayMode(.large)
         }
-        .frame(maxWidth: 1000, maxHeight: 800) // Limit the view size instead of taking whole screen
-        .clipShape(RoundedRectangle(cornerRadius: 12)) // Add rounded corners for better visual containment
+        .frame(maxWidth: 1000, maxHeight: 800)  // Limit the view size instead of taking whole screen
+        .clipShape(RoundedRectangle(cornerRadius: 12))  // Add rounded corners for better visual containment
         .alert($store.scope(state: \.alert, action: \.alert))
-        .onAppear {
-            store.send(.view(.onAppear))
-        }
-        .onDisappear {
-            store.send(.view(.onDisappear))
+        .task {
+            send(.task)
         }
     }
 
@@ -72,7 +70,7 @@ struct WebRTCSocketView: View {
 
                     TextField(
                         "ws://192.168.1.105:4000",
-                        text: $store.serverURL.sending(\.view.updateServerURL)
+                        text: $store.serverURL
                     )
                     .textFieldStyle(RoundedBorderTextFieldStyle())
                     .disabled(store.connectionStatus != .disconnected)
@@ -85,7 +83,7 @@ struct WebRTCSocketView: View {
                         .fontWeight(.medium)
                         .foregroundColor(themeConfig.colorTheme.secondary)
 
-                    TextField("Enter room ID", text: $store.roomId.sending(\.view.updateRoomId))
+                    TextField("Enter room ID", text: $store.roomId)
                         .textFieldStyle(RoundedBorderTextFieldStyle())
                         .disabled(store.connectionStatus != .disconnected)
                 }
@@ -97,7 +95,7 @@ struct WebRTCSocketView: View {
                         .fontWeight(.medium)
                         .foregroundColor(themeConfig.colorTheme.secondary)
 
-                    TextField("Your user ID", text: $store.userId.sending(\.view.updateUserId))
+                    TextField("Your user ID", text: $store.userId)
                         .textFieldStyle(RoundedBorderTextFieldStyle())
                         .disabled(store.connectionStatus != .disconnected)
                 }
@@ -108,7 +106,7 @@ struct WebRTCSocketView: View {
                     lastError: store.lastError,
                     themeConfig: themeConfig
                 ) {
-                    store.send(.view(.clearError))
+                    send(.clearError)
                 }
 
                 // Connection Buttons
@@ -117,10 +115,11 @@ struct WebRTCSocketView: View {
                         title: "Connect & Join Room",
                         icon: "network",
                         color: themeConfig.colorTheme.goldenColor,
-                        isExecuting: store.loadingItems.contains(.connecting) || store.loadingItems.contains(.joiningRoom),
+                        isExecuting: store.loadingItems.contains(.connecting)
+                            || store.loadingItems.contains(.joiningRoom),
                         isEnabled: store.canConnect
                     ) {
-                        store.send(.view(.connectToServer))
+                        send(.connectToServer)
                     }
 
                     OperationButton(
@@ -130,7 +129,7 @@ struct WebRTCSocketView: View {
                         isExecuting: false,
                         isEnabled: store.connectionStatus == .connected
                     ) {
-                        store.send(.view(.disconnect))
+                        send(.disconnect)
                     }
                 }
             }
@@ -164,11 +163,11 @@ struct WebRTCSocketView: View {
                             themeConfig: themeConfig,
                             onSendOffer: {
                                 // Mock WebRTC offer for demo
-                                store.send(.view(.sendOffer(to: user, sdp: "mock-sdp-offer")))
+                                send(.sendOffer(to: user, sdp: "mock-sdp-offer"))
                             },
                             onSendAnswer: {
                                 // Mock WebRTC answer for demo
-                                store.send(.view(.sendAnswer(to: user, sdp: "mock-sdp-answer")))
+                                send(.sendAnswer(to: user, sdp: "mock-sdp-answer"))
                             }
                         )
                     }
@@ -193,7 +192,7 @@ struct WebRTCSocketView: View {
                 Spacer()
 
                 Button("Clear") {
-                    store.send(.view(.clearMessages))
+                    send(.clearMessages)
                 }
                 .font(.caption)
                 .foregroundColor(themeConfig.colorTheme.primary)
@@ -274,7 +273,7 @@ struct WebRTCSocketView: View {
                                     Spacer()
 
                                     Button("Watch") {
-                                        store.send(.view(.createOfferForUser(user)))
+                                        send(.createOfferForUser(user))
                                     }
                                     .buttonStyle(.borderedProminent)
                                     .buttonBorderShape(.capsule)
@@ -514,7 +513,10 @@ struct UserRow: View {
         .padding(.horizontal, 12)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(isCurrentUser ? themeConfig.colorTheme.primary.opacity(0.05) : themeConfig.colorTheme.lightColor.opacity(0.5))
+                .fill(
+                    isCurrentUser
+                        ? themeConfig.colorTheme.primary.opacity(0.05)
+                        : themeConfig.colorTheme.lightColor.opacity(0.5))
         )
     }
 }
@@ -593,7 +595,8 @@ struct InfoRow: View {
 
 extension WebRTCSocketFeature.State {
     var canConnect: Bool {
-        !serverURL.isEmpty && !roomId.isEmpty && !userId.isEmpty && connectionStatus == .disconnected
+        !serverURL.isEmpty && !roomId.isEmpty && !userId.isEmpty
+            && connectionStatus == .disconnected
             && !loadingItems.contains(.connecting) && !loadingItems.contains(.joiningRoom)
     }
 
@@ -624,8 +627,12 @@ struct VideoCallViewWrapper: View {
     var body: some View {
         VStack {
             if store.isJoinedToRoom {
-                DirectVideoCallView()
-                    .navigationBarHidden(true)
+                DirectVideoCallView(
+                    store: .init(
+                        initialState: DirectVideoCallFeature.State(),
+                        reducer: {
+                            DirectVideoCallFeature()
+                        }))
             } else {
                 VStack(spacing: 20) {
                     ProgressView()
@@ -648,30 +655,6 @@ struct VideoCallViewWrapper: View {
                 .background(Color.black.ignoresSafeArea())
             }
         }
-    }
-}
-
-// MARK: - Direct Video Call View
-
-struct DirectVideoCallView: View {
-    @Dependency(\.webRTCClient) var webRTCClientDependency
-
-    var body: some View {
-        VideoCallView(webRTCClient: WebRTCClientLive.shared.getClient())
-            .onAppear {
-                print("🎥 DirectVideoCallView: Video viewer started with WebRTC client")
-
-                // Debug: Print current video tracks
-                let client = WebRTCClientLive.shared.getClient()
-                print(
-                    "🎥 DirectVideoCallView: Current video tracks count: \(client.remoteVideoTracks.count)"
-                )
-                for (index, track) in client.remoteVideoTracks.enumerated() {
-                    print(
-                        "🎥 Track \(index): User \(track.userId), Enabled: \(track.track?.isEnabled ?? false)"
-                    )
-                }
-            }
     }
 }
 

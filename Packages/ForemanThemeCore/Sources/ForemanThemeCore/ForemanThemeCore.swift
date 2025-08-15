@@ -9,43 +9,49 @@ import SwiftUI
 
 // MARK: - Color Extensions
 
-public extension Color {
+extension Color {
     /// Adjusts color properties for dynamic theme generation
-    func adjust(hueOffset: Double = 0, saturationMultiplier: Double = 1.0, brightnessMultiplier: Double = 1.0) -> Color {
-        var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
-        
+    public func adjust(
+        hueOffset: Double = 0, saturationMultiplier: Double = 1.0,
+        brightnessMultiplier: Double = 1.0
+    ) -> Color {
+        var h: CGFloat = 0
+        var s: CGFloat = 0
+        var b: CGFloat = 0
+        var a: CGFloat = 0
+
         #if os(iOS) || os(tvOS) || os(watchOS)
-        let uiColor = UIColor(self)
-        uiColor.getHue(&h, saturation: &s, brightness: &b, alpha: &a)
-        
-        let newHue = fmod(h + CGFloat(hueOffset), 1.0)
-        let newS = min(max(s * saturationMultiplier, 0), 1)
-        let newB = min(max(b * brightnessMultiplier, 0), 1)
-        
-        return Color(hue: newHue, saturation: newS, brightness: newB)
+            let uiColor = UIColor(self)
+            uiColor.getHue(&h, saturation: &s, brightness: &b, alpha: &a)
+
+            let newHue = fmod(h + CGFloat(hueOffset), 1.0)
+            let newS = min(max(s * saturationMultiplier, 0), 1)
+            let newB = min(max(b * brightnessMultiplier, 0), 1)
+
+            return Color(hue: newHue, saturation: newS, brightness: newB)
         #elseif os(macOS)
-        let nsColor = NSColor(self)
-        // Convert to RGB color space first to ensure compatibility
-        if let rgbColor = nsColor.usingColorSpace(.sRGB) {
-            rgbColor.getHue(&h, saturation: &s, brightness: &b, alpha: &a)
-        } else {
-            // Fallback: try converting to device RGB first
-            if let deviceRGB = nsColor.usingColorSpace(.deviceRGB) {
-                deviceRGB.getHue(&h, saturation: &s, brightness: &b, alpha: &a)
+            let nsColor = NSColor(self)
+            // Convert to RGB color space first to ensure compatibility
+            if let rgbColor = nsColor.usingColorSpace(.sRGB) {
+                rgbColor.getHue(&h, saturation: &s, brightness: &b, alpha: &a)
             } else {
-                // Final fallback: return original color
-                return self
+                // Fallback: try converting to device RGB first
+                if let deviceRGB = nsColor.usingColorSpace(.deviceRGB) {
+                    deviceRGB.getHue(&h, saturation: &s, brightness: &b, alpha: &a)
+                } else {
+                    // Final fallback: return original color
+                    return self
+                }
             }
-        }
-        
-        let newHue = fmod(h + CGFloat(hueOffset), 1.0)
-        let newS = min(max(s * saturationMultiplier, 0), 1)
-        let newB = min(max(b * brightnessMultiplier, 0), 1)
-        
-        return Color(hue: newHue, saturation: newS, brightness: newB)
+
+            let newHue = fmod(h + CGFloat(hueOffset), 1.0)
+            let newS = min(max(s * saturationMultiplier, 0), 1)
+            let newB = min(max(b * brightnessMultiplier, 0), 1)
+
+            return Color(hue: newHue, saturation: newS, brightness: newB)
         #else
-        // Other platforms - return original color
-        return self
+            // Other platforms - return original color
+            return self
         #endif
     }
 }
@@ -89,21 +95,33 @@ public struct DynamicTheme: ColorTheme {
     public var brightColor: Color { baseColor.adjust(brightnessMultiplier: 1.3) }
     public var pureColor: Color { baseColor }
     public var deepColor: Color { baseColor.adjust(brightnessMultiplier: 0.7) }
-    public var lightColor: Color { baseColor.adjust(saturationMultiplier: 0.4, brightnessMultiplier: 1.5) }
-    public var darkColor: Color { baseColor.adjust(saturationMultiplier: 1.2, brightnessMultiplier: 0.4) }
-    public var mediumColor: Color { baseColor.adjust(saturationMultiplier: 0.8, brightnessMultiplier: 1.1) }
-    public var pasteltColor: Color { baseColor.adjust(saturationMultiplier: 0.3, brightnessMultiplier: 1.2) }
+    public var lightColor: Color {
+        baseColor.adjust(saturationMultiplier: 0.4, brightnessMultiplier: 1.5)
+    }
+    public var darkColor: Color {
+        baseColor.adjust(saturationMultiplier: 1.2, brightnessMultiplier: 0.4)
+    }
+    public var mediumColor: Color {
+        baseColor.adjust(saturationMultiplier: 0.8, brightnessMultiplier: 1.1)
+    }
+    public var pasteltColor: Color {
+        baseColor.adjust(saturationMultiplier: 0.3, brightnessMultiplier: 1.2)
+    }
     public var burntColor: Color { baseColor.adjust(hueOffset: -0.05, brightnessMultiplier: 0.6) }
     public var warmColor: Color { baseColor.adjust(hueOffset: 0.08, saturationMultiplier: 0.8) }
-    public var goldenColor: Color { baseColor.adjust(hueOffset: 0.15, saturationMultiplier: 1.1, brightnessMultiplier: 1.1) }
-    public var deepBurntColor: Color { baseColor.adjust(hueOffset: -0.08, saturationMultiplier: 1.1, brightnessMultiplier: 0.5) }
+    public var goldenColor: Color {
+        baseColor.adjust(hueOffset: 0.15, saturationMultiplier: 1.1, brightnessMultiplier: 1.1)
+    }
+    public var deepBurntColor: Color {
+        baseColor.adjust(hueOffset: -0.08, saturationMultiplier: 1.1, brightnessMultiplier: 0.5)
+    }
 }
 
 // MARK: - Default Implementation Helpers
 
-public extension ColorTheme {
+extension ColorTheme {
     /// Default mesh gradient implementation using all colors
-    var meshGradientColors: [Color] {
+    public var meshGradientColors: [Color] {
         [
             brightColor, pureColor, deepColor,
             lightColor, darkColor, mediumColor,
@@ -111,12 +129,12 @@ public extension ColorTheme {
             pureColor, deepBurntColor, goldenColor,
         ]
     }
-    
+
     /// Default semantic color mappings
-    var primary: Color { pureColor }
-    var secondary: Color { warmColor }
-    var accent: Color { goldenColor }
-    var background: Color { lightColor }
+    public var primary: Color { pureColor }
+    public var secondary: Color { warmColor }
+    public var accent: Color { goldenColor }
+    public var background: Color { lightColor }
 }
 
 // MARK: - Theme Variants
@@ -201,14 +219,14 @@ public struct ThemeConfiguration<T: ColorTheme> {
     }
 
     // MARK: - Convenience Accessors
-    
+
     public var primary: Color { colorTheme.primary }
     public var secondary: Color { colorTheme.secondary }
     public var accent: Color { colorTheme.accent }
     public var background: Color { colorTheme.background }
-    
+
     // MARK: - Direct Color Access
-    
+
     public var brightColor: Color { colorTheme.brightColor }
     public var pureColor: Color { colorTheme.pureColor }
     public var deepColor: Color { colorTheme.deepColor }
@@ -233,7 +251,7 @@ public struct ThemeFactory {
     ) -> ThemeConfiguration<T> {
         ThemeConfiguration(colorTheme: theme, variant: variant)
     }
-    
+
     /// Creates a configuration with custom animation settings
     public static func configuration<T: ColorTheme>(
         for theme: T,
@@ -248,9 +266,9 @@ public struct ThemeFactory {
             hueRotationIntensity: hueRotationIntensity
         )
     }
-    
+
     // MARK: - Dynamic Theme Convenience Methods
-    
+
     /// Creates a dynamic theme from a base color
     public static func dynamic(
         baseColor: Color,
@@ -258,7 +276,7 @@ public struct ThemeFactory {
     ) -> ThemeConfiguration<DynamicTheme> {
         ThemeConfiguration(colorTheme: DynamicTheme(baseColor: baseColor), variant: variant)
     }
-    
+
     /// Creates a dynamic theme with custom settings
     public static func dynamic(
         baseColor: Color,
@@ -273,71 +291,75 @@ public struct ThemeFactory {
             hueRotationIntensity: hueRotationIntensity
         )
     }
-    
+
     // MARK: - Predefined Dynamic Themes
-    
+
     /// Orange dynamic theme
-    public static func orange(variant: ThemeVariant = .vibrant) -> ThemeConfiguration<DynamicTheme> {
+    public static func orange(variant: ThemeVariant = .vibrant) -> ThemeConfiguration<DynamicTheme>
+    {
         dynamic(baseColor: Color(red: 1.0, green: 0.5, blue: 0.0), variant: variant)
     }
-    
+
     /// Blue dynamic theme
     public static func blue(variant: ThemeVariant = .vibrant) -> ThemeConfiguration<DynamicTheme> {
         dynamic(baseColor: Color(red: 0.0, green: 0.5, blue: 1.0), variant: variant)
     }
-    
+
     /// Green dynamic theme
     public static func green(variant: ThemeVariant = .vibrant) -> ThemeConfiguration<DynamicTheme> {
         dynamic(baseColor: Color(red: 0.0, green: 0.8, blue: 0.2), variant: variant)
     }
-    
+
     /// Red dynamic theme
     public static func red(variant: ThemeVariant = .vibrant) -> ThemeConfiguration<DynamicTheme> {
         dynamic(baseColor: Color(red: 1.0, green: 0.0, blue: 0.0), variant: variant)
     }
-    
+
     /// Purple dynamic theme
-    public static func purple(variant: ThemeVariant = .vibrant) -> ThemeConfiguration<DynamicTheme> {
+    public static func purple(variant: ThemeVariant = .vibrant) -> ThemeConfiguration<DynamicTheme>
+    {
         dynamic(baseColor: Color(red: 0.6, green: 0.0, blue: 0.8), variant: variant)
     }
-    
+
     /// Pink dynamic theme
     public static func pink(variant: ThemeVariant = .vibrant) -> ThemeConfiguration<DynamicTheme> {
         dynamic(baseColor: Color(red: 1.0, green: 0.2, blue: 0.6), variant: variant)
     }
-    
+
     /// Yellow dynamic theme
-    public static func yellow(variant: ThemeVariant = .vibrant) -> ThemeConfiguration<DynamicTheme> {
+    public static func yellow(variant: ThemeVariant = .vibrant) -> ThemeConfiguration<DynamicTheme>
+    {
         dynamic(baseColor: Color(red: 1.0, green: 0.8, blue: 0.0), variant: variant)
     }
-    
+
     /// Teal dynamic theme
     public static func teal(variant: ThemeVariant = .vibrant) -> ThemeConfiguration<DynamicTheme> {
         dynamic(baseColor: Color(red: 0.0, green: 0.8, blue: 0.8), variant: variant)
     }
-    
+
     /// Indigo dynamic theme
-    public static func indigo(variant: ThemeVariant = .vibrant) -> ThemeConfiguration<DynamicTheme> {
+    public static func indigo(variant: ThemeVariant = .vibrant) -> ThemeConfiguration<DynamicTheme>
+    {
         dynamic(baseColor: Color(red: 0.3, green: 0.0, blue: 0.8), variant: variant)
     }
-    
+
     /// Mint dynamic theme
     public static func mint(variant: ThemeVariant = .vibrant) -> ThemeConfiguration<DynamicTheme> {
         dynamic(baseColor: Color(red: 0.0, green: 1.0, blue: 0.8), variant: variant)
     }
-    
+
     /// Cyan dynamic theme
     public static func cyan(variant: ThemeVariant = .vibrant) -> ThemeConfiguration<DynamicTheme> {
         dynamic(baseColor: Color(red: 0.0, green: 1.0, blue: 1.0), variant: variant)
     }
-    
+
     /// Brown dynamic theme
     public static func brown(variant: ThemeVariant = .vibrant) -> ThemeConfiguration<DynamicTheme> {
         dynamic(baseColor: Color(red: 0.6, green: 0.4, blue: 0.2), variant: variant)
     }
-    
+
     // MARK: - Custom Color Dynamic Themes
-    
+
     /// Creates a custom color dynamic theme
     public static func custom(
         red: Double, green: Double, blue: Double,

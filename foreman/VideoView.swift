@@ -5,6 +5,8 @@
 //  Created by Jed Lu on 2025/7/4.
 //
 
+import Foundation
+import OSLog
 import SwiftUI
 import WebRTC
 
@@ -12,9 +14,10 @@ import WebRTC
 
 struct VideoView: UIViewRepresentable {
     let videoTrack: RTCVideoTrack?
+    private let logger = Logger(subsystem: "foreman", category: "VideoView")
 
     func makeUIView(context: Context) -> RTCMTLVideoView {
-        print("📺 VideoView: Creating RTCMTLVideoView")
+        logger.info("📺 VideoView: Creating RTCMTLVideoView")
         let videoView = RTCMTLVideoView(frame: .zero)
         videoView.videoContentMode = .scaleAspectFill
         videoView.delegate = context.coordinator
@@ -24,46 +27,46 @@ struct VideoView: UIViewRepresentable {
         videoView.isOpaque = true
         videoView.contentMode = .scaleAspectFill
 
-        print("📺 VideoView: RTCMTLVideoView created successfully")
+        logger.info("📺 VideoView: RTCMTLVideoView created successfully")
         return videoView
     }
 
     func updateUIView(_ uiView: RTCMTLVideoView, context: Context) {
-        print(
+        logger.info(
             "📺 VideoView: updateUIView called with videoTrack: \(videoTrack != nil ? "present" : "nil")"
         )
 
         // Always remove existing renderers first
         if let track = context.coordinator.currentTrack {
-            print("📺 VideoView: Removing existing video track from renderer")
+            logger.info("📺 VideoView: Removing existing video track from renderer")
             track.remove(uiView)
             context.coordinator.currentTrack = nil
         }
 
         if let videoTrack = videoTrack {
-            print("📺 VideoView: Adding video track to renderer")
-            print("📺 VideoView: Video track enabled: \(videoTrack.isEnabled)")
-            print("📺 VideoView: Video track state: \(videoTrack.readyState.rawValue)")
-            print("📺 VideoView: Video track kind: \(videoTrack.kind)")
+            logger.info("📺 VideoView: Adding video track to renderer")
+            logger.info("📺 VideoView: Video track enabled: \(videoTrack.isEnabled)")
+            logger.info("📺 VideoView: Video track state: \(videoTrack.readyState.rawValue)")
+            logger.info("📺 VideoView: Video track kind: \(videoTrack.kind)")
 
             videoTrack.add(uiView)
             context.coordinator.currentTrack = videoTrack
 
             // Force a layout update
-            DispatchQueue.main.async {
+            DispatchQueue.main.async { [self] in
                 uiView.setNeedsLayout()
                 uiView.layoutIfNeeded()
-                print("📺 VideoView: Layout updated for video renderer")
+                self.logger.info("📺 VideoView: Layout updated for video renderer")
             }
 
             // Add a debug check to see if frames are being received
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                print("📺 VideoView: Video renderer check - bounds: \(uiView.bounds)")
-                print("📺 VideoView: Video renderer check - isHidden: \(uiView.isHidden)")
-                print("📺 VideoView: Video renderer check - alpha: \(uiView.alpha)")
+            DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(2)) {
+                self.logger.info("📺 VideoView: Video renderer check - bounds: \(uiView.bounds)")
+                self.logger.info("📺 VideoView: Video renderer check - isHidden: \(uiView.isHidden)")
+                self.logger.info("📺 VideoView: Video renderer check - alpha: \(uiView.alpha)")
             }
         } else {
-            print("📺 VideoView: No video track to render")
+            logger.info("📺 VideoView: No video track to render")
             uiView.renderFrame(nil)
         }
     }
@@ -74,20 +77,34 @@ struct VideoView: UIViewRepresentable {
 
     class Coordinator: NSObject, RTCVideoViewDelegate {
         var currentTrack: RTCVideoTrack?
+        private let logger = Logger(subsystem: "foreman", category: "VideoViewCoordinator")
 
         func videoView(_ videoView: RTCVideoRenderer, didChangeVideoSize size: CGSize) {
-            print("📺 VideoView: Video size changed to \(size)")
-            print("📺 VideoView: Video size change - width: \(size.width), height: \(size.height)")
+            self.logger.info("📺 VideoView: Video size changed to \(size)")
+            self.logger.info(
+                "📺 VideoView: Video size change - width: \(size.width), height: \(size.height)")
 
             // Ensure we're on the main thread for UI updates
-            DispatchQueue.main.async {
+            DispatchQueue.main.async { [self] in
                 if let metalView = videoView as? RTCMTLVideoView {
                     metalView.setNeedsLayout()
                     metalView.layoutIfNeeded()
-                    print("📺 VideoView: Metal view layout refreshed after size change")
+                    logger.info("📺 VideoView: Metal view layout refreshed after size change")
                 }
             }
         }
+    }
+}
+
+extension CGRect: @retroactive CustomStringConvertible {
+    public var description: String {
+        "\(self.size)"
+    }
+}
+
+extension CGSize: @retroactive CustomStringConvertible {
+    public var description: String {
+        "\(self.width), \(self.height)"
     }
 }
 
@@ -126,7 +143,6 @@ struct RemoteVideoViewer: View {
                         Spacer()
                     }
                 } else {
-                    // Display remote video streams
                     RemoteVideoGrid(webRTCClient: webRTCClient)
                 }
 
@@ -190,7 +206,7 @@ struct RemoteVideoGrid: View {
     @ObservedObject var webRTCClient: WebRTCClient
 
     private let columns = [
-        GridItem(.flexible()),
+        GridItem(.flexible())
     ]
 
     var body: some View {
@@ -341,10 +357,15 @@ struct VideoControlsView: View {
     }
 }
 
+#Preview {
+    VideoControlsView(webRTCClient: WebRTCClient())
+}
+
 // MARK: - Video Viewer App
 
 struct VideoCallView: View {
     @ObservedObject var webRTCClient: WebRTCClient
+    private let logger = Logger(subsystem: "foreman", category: "VideoCallView")
 
     var body: some View {
         ZStack {
@@ -362,9 +383,9 @@ struct VideoCallView: View {
         .navigationTitle("Video Viewer")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarHidden(true)
-        .onAppear {
+        .task {
             // No permissions needed for receive-only mode
-            print("🎥 Video viewer started in receive-only mode")
+            logger.info("🎥 Video viewer started in receive-only mode")
         }
     }
 }
