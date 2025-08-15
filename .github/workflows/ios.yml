@@ -53,4 +53,19 @@ jobs:
           if [ $scheme = default ]; then scheme=$(cat default); fi
           if [ "`ls -A | grep -i \\.xcworkspace\$`" ]; then filetype_parameter="workspace" && file_to_build="`ls -A | grep -i \\.xcworkspace\$`"; else filetype_parameter="project" && file_to_build="`ls -A | grep -i \\.xcodeproj\$`"; fi
           file_to_build=`echo $file_to_build | awk '{$1=$1;print}'`
-          xcodebuild test-without-building -scheme "$scheme" -"$filetype_parameter" "$file_to_build" -destination "platform=iOS Simulator,name=iPhone 16,OS=18.4" -skipMacroValidation
+          xcodebuild test-without-building -scheme "$scheme" -"$filetype_parameter" "$file_to_build" -destination "platform=iOS Simulator,name=iPhone 16,OS=18.4" -skipMacroValidation -resultBundlePath TestResults.xcresult
+      - name: Upload xcresult artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: TestResults.xcresult
+
+      - name: Print test failure summary
+        if: always() # 即使測試失敗也要執行
+        run: |
+          echo "=== Test Failures Summary ==="
+          xcrun xcresulttool get \
+          --path TestResults.xcresult \
+          --format json | jq -r '
+            .. | objects | select(has("testStatus") and .testStatus == "Failure") |
+            "\(.identifier) - \(.name) : \(.testStatus)"'
