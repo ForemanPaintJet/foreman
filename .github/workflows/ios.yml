@@ -31,31 +31,20 @@ jobs:
           PROVISIONING_PROFILE_SPECIFIER: ""
         run: |
           # xcrun xctrace returns via stderr, not the expected stdout (see https://developer.apple.com/forums/thread/663959)
-          # 找第一個可用的 iPhone 模擬器（名稱與 OS）
-          read device os <<< $(xcrun simctl list devices available | grep -m1 "iPhone" | awk -F '[()]' '{print $1, $2}' | sed -E 's/ Simulator$//')
-          # 如果 scheme 是 default，就讀 default 檔案內容
-          if [ "$scheme" = default ]; then
-            scheme=$(cat default)
-          fi
 
-          # 判斷是 workspace 還是 project
-          if ls -A *.xcworkspace >/dev/null 2>&1; then
-              filetype_parameter="workspace"
-              file_to_build=$(ls -A *.xcworkspace | head -1)
-          else
-              filetype_parameter="project"
-              file_to_build=$(ls -A *.xcodeproj | head -1)
-          fi
+          echo "Detecting device..."
+          device=$(xcrun xctrace list devices 2>&1 \
+                  | tee /dev/stderr \
+                  | grep -oE 'iPhone.*?[^\(]+' \
+                  | head -1 \
+                  | awk '{$1=$1;print}' \
+                  | sed -e "s/ Simulator$//")
+          echo "Selected device: $device"
 
-          # 去掉檔名空白
-          file_to_build=$(echo "$file_to_build" | awk '{$1=$1;print}')
-
-          # 編譯（加上 OS）
-          xcodebuild build-for-testing \
-          -verbose \
-          -scheme "$scheme" \
-          -"$filetype_parameter" "$file_to_build" \
-          -destination "platform=$platform,name=$device,OS=$os"
+          if [ $scheme = default ]; then scheme=$(cat default); fi
+          if [ "`ls -A | grep -i \\.xcworkspace\$`" ]; then filetype_parameter="workspace" && file_to_build="`ls -A | grep -i \\.xcworkspace\$`"; else filetype_parameter="project" && file_to_build="`ls -A | grep -i \\.xcodeproj\$`"; fi
+          file_to_build=`echo $file_to_build | awk '{$1=$1;print}'`
+          xcodebuild build-for-testing -v -scheme "$scheme" -"$filetype_parameter" "$file_to_build" -destination "platform=$platform,name=$device"
       - name: Test
         env:
           scheme: ${{ 'default' }}
