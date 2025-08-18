@@ -206,7 +206,7 @@ class WebRTCClient: NSObject, ObservableObject {
         }
     }
 
-    func handleRemoteOffer(_ offer: WebRTCOffer) async throws {
+    func handleRemoteOffer(_ offer: WebRTCOffer) async throws -> RTCSessionDescription {
         let userId = offer.clientId
 
         logger.info("📞 WebRTCClient: Handling remote offer from \(userId)")
@@ -261,22 +261,8 @@ class WebRTCClient: NSObject, ObservableObject {
                 "🧊 WebRTCClient: ICE connection state after setting local description: ",
                 peerConnection.iceConnectionState)
 
-            let webRTCAnswer = WebRTCAnswer(
-                sdp: answer.sdp, type: "answer", clientId: userId, videoSource: "")
-
-            answerSubject.send(webRTCAnswer)
-            logger.info("✅ WebRTCClient: Answer created and sent for \(userId)")
-
-            // Add a small delay to allow ICE gathering to start
-            Task { [logger] in
-                try await Task.sleep(nanoseconds: 1_000_000_000)  // 1 second
-                logger.info(
-                    "🧊 WebRTCClient: ICE gathering state after 1s: ",
-                    peerConnection.iceGatheringState)
-                logger.info(
-                    "🧊 WebRTCClient: ICE connection state after 1s: ",
-                    peerConnection.iceConnectionState)
-            }
+            logger.info("✅ WebRTCClient: Answer created for \(userId)")
+            return answer
         } catch {
             logger.error("❌ WebRTCClient: Failed to handle remote offer from \(userId): \(error)")
             throw error
@@ -551,7 +537,7 @@ struct WebRTCClientDependency {
     var createPeerConnection: @Sendable (String) async -> Bool = { _ in false }
     var removePeerConnection: @Sendable (String) async -> Void
     var createOffer: @Sendable (String) async throws -> Void
-    var handleRemoteOffer: @Sendable (WebRTCOffer) async throws -> Void
+    var handleRemoteOffer: @Sendable (WebRTCOffer) async throws -> RTCSessionDescription
     var handleRemoteAnswer: @Sendable (WebRTCAnswer) async throws -> Void
     var handleRemoteIceCandidate: @Sendable (ICECandidate) async throws -> Void
     var toggleAudio: @Sendable () -> Void
@@ -691,7 +677,7 @@ class WebRTCClientLive {
         try await webRTCClient.createOffer(for: userId)
     }
 
-    func handleRemoteOffer(_ offer: WebRTCOffer) async throws {
+    func handleRemoteOffer(_ offer: WebRTCOffer) async throws -> RTCSessionDescription {
         try await webRTCClient.handleRemoteOffer(offer)
     }
 

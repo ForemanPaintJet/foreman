@@ -35,7 +35,7 @@ struct WebRTCMqttFeature {
         var loadingItems: Set<LoadingItem> = []
         var connectionStatus: MqttClientKit.State = .idle
         var mqttInfo: MqttClientKitInfo = .init(
-            address: "192.168.1.124", port: 1883, clientID: "")
+            address: "192.168.1.122", port: 1883, clientID: "")
 
         var userId: String = ""
         var connectedUsers: [String] = []
@@ -188,11 +188,6 @@ struct WebRTCMqttFeature {
                     group.addTask {
                         for await offer in await webRTCClient.offerStream() {
                             await send(._internal(.webRTCOfferGenerated(offer)))
-                        }
-                    }
-                    group.addTask {
-                        for await answer in await webRTCClient.answerStream() {
-                            await send(._internal(.webRTCAnswerGenerated(answer)))
                         }
                     }
                     group.addTask {
@@ -482,9 +477,12 @@ struct WebRTCMqttFeature {
                 "🟠 [WebRTC] Offer received: from=\(offer.clientId), sdp length=\(offer.sdp.count)"
             )
             state.pendingOffers.append(offer)
+            let userId = state.userId
             return .run { send in
                 do {
-                    try await webRTCClient.handleRemoteOffer(offer)
+                    let description = try await webRTCClient.handleRemoteOffer(offer)
+                    let answer = WebRTCAnswer(sdp: description.sdp, type: "answer", clientId: userId, videoSource: "")
+                    await send(._internal(.webRTCAnswerGenerated(answer)))
                 } catch {
                     await send(
                         ._internal(
