@@ -223,6 +223,7 @@
 				41B494502E16B10A00890E09 /* XCRemoteSwiftPackageReference "WebRTC" */,
 				41DECCD02E1E559100C52C6F /* XCLocalSwiftPackageReference "Packages/ForemanThemeCore" */,
 				41CE97ED2E29FCF200C7FAAF /* XCRemoteSwiftPackageReference "MqttClientKit" */,
+				41A426532E5372E8005BDF4D /* XCLocalSwiftPackageReference "Packages/WebRTCCore" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 41A1FB7B2E16AF3200A9EDA5 /* Products */;
@@ -626,6 +627,10 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
+		41A426532E5372E8005BDF4D /* XCLocalSwiftPackageReference "Packages/WebRTCCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/WebRTCCore;
+		};
 		41DECCD02E1E559100C52C6F /* XCLocalSwiftPackageReference "Packages/ForemanThemeCore" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/ForemanThemeCore;
