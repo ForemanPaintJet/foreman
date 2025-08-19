@@ -9,6 +9,7 @@ import Foundation
 import OSLog
 import SwiftUI
 import WebRTC
+import WebRTCCore
 
 // MARK: - Video Renderer View
 
@@ -111,14 +112,14 @@ extension CGSize: @retroactive CustomStringConvertible {
 // MARK: - Remote Video Viewer
 
 struct RemoteVideoViewer: View {
-    @ObservedObject var webRTCClient: WebRTCClient
+    let remoteVideoTracks: [VideoTrackInfo]
 
     var body: some View {
         GeometryReader { geometry in
             ZStack {
                 Color.black.ignoresSafeArea()
 
-                if webRTCClient.remoteVideoTracks.isEmpty {
+                if remoteVideoTracks.isEmpty {
                     // No remote streams available
                     VStack {
                         Spacer()
@@ -143,14 +144,14 @@ struct RemoteVideoViewer: View {
                         Spacer()
                     }
                 } else {
-                    RemoteVideoGrid(webRTCClient: webRTCClient)
+                    RemoteVideoGrid(remoteVideoTracks: remoteVideoTracks)
                 }
 
                 // Connection status overlay
                 VStack {
                     HStack {
                         Spacer()
-                        ConnectionStatusOverlay(webRTCClient: webRTCClient)
+                        ConnectionStatusOverlay(connectionStates: [])
                     }
                     .padding()
 
@@ -162,11 +163,11 @@ struct RemoteVideoViewer: View {
 }
 
 struct ConnectionStatusOverlay: View {
-    @ObservedObject var webRTCClient: WebRTCClient
+    let connectionStates: [PeerConnectionInfo]
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 8) {
-            ForEach(webRTCClient.connectionStates, id: \.userId) { connectionInfo in
+            ForEach(connectionStates, id: \.userId) { connectionInfo in
                 HStack(spacing: 8) {
                     Text(connectionInfo.userId)
                         .font(.caption)
@@ -203,7 +204,7 @@ struct ConnectionStatusOverlay: View {
 // MARK: - Remote Video Grid
 
 struct RemoteVideoGrid: View {
-    @ObservedObject var webRTCClient: WebRTCClient
+    let remoteVideoTracks: [VideoTrackInfo]
 
     private let columns = [
         GridItem(.flexible())
@@ -212,8 +213,8 @@ struct RemoteVideoGrid: View {
     var body: some View {
         ScrollView {
             LazyVGrid(columns: columns, spacing: 16) {
-                ForEach(webRTCClient.remoteVideoTracks) { videoInfo in
-                    RemoteVideoCell(videoInfo: videoInfo, webRTCClient: webRTCClient)
+                ForEach(remoteVideoTracks) { videoInfo in
+                    RemoteVideoCell(videoInfo: videoInfo, connectionStates: [])
                 }
             }
             .padding()
@@ -223,10 +224,10 @@ struct RemoteVideoGrid: View {
 
 struct RemoteVideoCell: View {
     let videoInfo: VideoTrackInfo
-    @ObservedObject var webRTCClient: WebRTCClient
+    let connectionStates: [PeerConnectionInfo]
 
     private var connectionState: RTCPeerConnectionState? {
-        webRTCClient.connectionStates.first { $0.userId == videoInfo.userId }?.connectionState
+        connectionStates.first { $0.userId == videoInfo.userId }?.connectionState
     }
 
     var body: some View {
@@ -309,7 +310,7 @@ struct RemoteVideoCell: View {
 // MARK: - Video Controls (Receive-only mode)
 
 struct VideoControlsView: View {
-    @ObservedObject var webRTCClient: WebRTCClient
+    let remoteVideoTracks: [VideoTrackInfo]
 
     var body: some View {
         VStack(spacing: 16) {
@@ -320,7 +321,7 @@ struct VideoControlsView: View {
             HStack(spacing: 20) {
                 // Info about connected streams
                 VStack {
-                    Text("\(webRTCClient.remoteVideoTracks.count)")
+                    Text("\(remoteVideoTracks.count)")
                         .font(.title2)
                         .fontWeight(.bold)
                         .foregroundColor(.white)
@@ -335,12 +336,12 @@ struct VideoControlsView: View {
 
                 // Connection status summary
                 VStack {
-                    Text(
-                        "\(webRTCClient.connectionStates.filter { $0.connectionState == .connected }.count)"
-                    )
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(.white)
+//                    Text(
+//                        "\(webRTCEngine.connectionStates.filter { $0.connectionState == .connected }.count)"
+//                    )
+//                    .font(.title2)
+//                    .fontWeight(.bold)
+//                    .foregroundColor(.white)
                     Text("Connected")
                         .font(.caption)
                         .foregroundColor(.gray)
@@ -358,13 +359,14 @@ struct VideoControlsView: View {
 }
 
 #Preview {
-    VideoControlsView(webRTCClient: WebRTCClient())
+    VideoControlsView(remoteVideoTracks: [])
 }
 
 // MARK: - Video Viewer App
 
 struct VideoCallView: View {
-    @ObservedObject var webRTCClient: WebRTCClient
+    let remoteVideoTracks: [VideoTrackInfo]
+    let connectionStates: [PeerConnectionInfo]
     private let logger = Logger(subsystem: "foreman", category: "VideoCallView")
 
     var body: some View {
@@ -373,11 +375,11 @@ struct VideoCallView: View {
 
             VStack(spacing: 0) {
                 // Main video viewing area
-                RemoteVideoViewer(webRTCClient: webRTCClient)
-
-                // Bottom controls
-                VideoControlsView(webRTCClient: webRTCClient)
-                    .padding()
+                RemoteVideoViewer(remoteVideoTracks: remoteVideoTracks)
+//
+//                // Bottom controls
+//                VideoControlsView(remoteVideoTracks: remoteVideoTracks)
+//                    .padding()
             }
         }
         .navigationTitle("Video Viewer")
@@ -391,5 +393,5 @@ struct VideoCallView: View {
 }
 
 #Preview {
-    VideoCallView(webRTCClient: WebRTCClient())
+    VideoCallView(remoteVideoTracks: [], connectionStates: [])
 }

@@ -39,23 +39,8 @@ public struct WebRTCDependency {
   // MARK: - Event Stream (replaces delegate pattern)
 
   /// Stream of WebRTC events for modern async handling
+  /// All state changes (video tracks, connection states, etc.) are communicated through this stream
   public var events: @Sendable () -> AsyncStream<WebRTCEvent> = { AsyncStream.never }
-
-  // MARK: - State Access
-
-  /// Get current video tracks
-  public var getVideoTracks: @Sendable () async -> [VideoTrackInfo] = { [] }
-
-  /// Get current connection states
-  public var getConnectionStates: @Sendable () async -> [PeerConnectionInfo] = { [] }
-
-  /// Get connected peers
-  public var getConnectedPeers: @Sendable () async -> [String] = { [] }
-
-  // MARK: - Engine Access
-
-  /// Get the WebRTC engine instance (for advanced usage)
-  public var getEngine: @Sendable () async -> WebRTCEngine = { await MainActor.run { WebRTCEngine() } }
 }
 
 // MARK: - Dependency Keys
@@ -70,14 +55,10 @@ extension WebRTCDependency: DependencyKey {
     
     return WebRTCDependency(
       createPeerConnection: { userId in
-        await MainActor.run {
-          engine.createPeerConnection(for: userId)
-        }
+        await engine.createPeerConnection(for: userId)
       },
       removePeerConnection: { userId in
-        await MainActor.run {
-          engine.removePeerConnection(for: userId)
-        }
+        await engine.removePeerConnection(for: userId)
       },
       createOffer: { userId in
         try await engine.createOffer(for: userId)
@@ -93,26 +74,6 @@ extension WebRTCDependency: DependencyKey {
       },
       events: {
         engine.events
-      },
-      getVideoTracks: {
-        await MainActor.run {
-          engine.videoTracks
-        }
-      },
-      getConnectionStates: {
-        await MainActor.run {
-          engine.connectionStates
-        }
-      },
-      getConnectedPeers: {
-        await MainActor.run {
-          engine.connectedPeers
-        }
-      },
-      getEngine: {
-        await MainActor.run {
-          engine
-        }
       }
     )
   }()

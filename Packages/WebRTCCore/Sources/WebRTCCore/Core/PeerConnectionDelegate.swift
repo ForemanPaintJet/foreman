@@ -35,21 +35,21 @@ class PeerConnectionDelegate: NSObject, RTCPeerConnectionDelegate {
     _ peerConnection: RTCPeerConnection,
     didChange stateChanged: RTCSignalingState
   ) {
-    logger.info("🔗 PeerConnection[\(userId)]: Signaling state changed to \(String(describing: stateChanged))")
+    logger.info("🔗 PeerConnection[\(self.userId)]: Signaling state changed to \(String(describing: stateChanged))")
   }
 
   func peerConnection(_ peerConnection: RTCPeerConnection, didAdd stream: RTCMediaStream) {
     logger.info(
-      "📺 PeerConnection[\(userId)]: Legacy stream added with \(stream.audioTracks.count) audio tracks and \(stream.videoTracks.count) video tracks"
+      "📺 PeerConnection[\(self.userId)]: Legacy stream added with \(stream.audioTracks.count) audio tracks and \(stream.videoTracks.count) video tracks"
     )
     logger.info(
-      "📺 PeerConnection[\(userId)]: Skipping legacy stream handling - using modern track-based approach"
+      "📺 PeerConnection[\(self.userId)]: Skipping legacy stream handling - using modern track-based approach"
     )
     // We use the modern didAdd receiver method instead
   }
 
   func peerConnection(_ peerConnection: RTCPeerConnection, didRemove stream: RTCMediaStream) {
-    logger.info("📺 PeerConnection[\(userId)]: Stream removed")
+    logger.info("📺 PeerConnection[\(self.userId)]: Stream removed")
     // Video track removal is handled in didRemove receiver method
   }
 
@@ -60,43 +60,43 @@ class PeerConnectionDelegate: NSObject, RTCPeerConnectionDelegate {
     didAdd receiver: RTCRtpReceiver,
     streams: [RTCMediaStream]
   ) {
-    logger.info("📺 PeerConnection[\(userId)]: Modern track added via receiver")
-    logger.info("📺 PeerConnection[\(userId)]: Track kind: \(receiver.track?.kind ?? "unknown")")
-    logger.info("📺 PeerConnection[\(userId)]: Track enabled: \(receiver.track?.isEnabled ?? false)")
+    logger.info("📺 PeerConnection[\(self.userId)]: Modern track added via receiver")
+    logger.info("📺 PeerConnection[\(self.userId)]: Track kind: \(receiver.track?.kind ?? "unknown")")
+    logger.info("📺 PeerConnection[\(self.userId)]: Track enabled: \(receiver.track?.isEnabled ?? false)")
 
     if let track = receiver.track, track.kind == "video",
       let videoTrack = track as? RTCVideoTrack
     {
-      logger.info("📺 PeerConnection[\(userId)]: Video track received - sending event")
+      logger.info("📺 PeerConnection[\(self.userId)]: Video track received - sending event")
       let trackInfo = VideoTrackInfo(
         id: UUID().uuidString,
-        userId: userId,
+        userId: self.userId,
         track: videoTrack
       )
       eventsContinuation.yield(.videoTrackAdded(trackInfo: trackInfo))
     } else if let track = receiver.track, track.kind == "audio" {
-      logger.info("🔊 PeerConnection[\(userId)]: Audio track received")
+      logger.info("🔊 PeerConnection[\(self.userId)]: Audio track received")
     }
   }
 
   func peerConnection(_ peerConnection: RTCPeerConnection, didRemove receiver: RTCRtpReceiver) {
-    logger.info("📺 PeerConnection[\(userId)]: Modern track removed via receiver")
+    logger.info("📺 PeerConnection[\(self.userId)]: Modern track removed via receiver")
 
     if let track = receiver.track, track.kind == "video" {
       // Track removal is handled automatically when the peer connection is removed
-      logger.info("📺 PeerConnection[\(userId)]: Video track removed")
+      logger.info("📺 PeerConnection[\(self.userId)]: Video track removed")
     }
   }
 
   func peerConnection(_ peerConnection: RTCPeerConnection, didGenerate candidate: RTCIceCandidate) {
-    logger.info("🧊 PeerConnection[\(userId)]: ICE candidate generated")
-    logger.info("🧊 PeerConnection[\(userId)]: Candidate SDP: \(candidate.sdp)")
+    logger.info("🧊 PeerConnection[\(self.userId)]: ICE candidate generated")
+    logger.info("🧊 PeerConnection[\(self.userId)]: Candidate SDP: \(candidate.sdp)")
 
     eventsContinuation.yield(.iceCandidateGenerated(
       candidate: candidate.sdp,
       sdpMLineIndex: Int(candidate.sdpMLineIndex),
       sdpMid: candidate.sdpMid,
-      userId: userId
+      userId: self.userId
     ))
   }
 
@@ -104,39 +104,39 @@ class PeerConnectionDelegate: NSObject, RTCPeerConnectionDelegate {
     _ peerConnection: RTCPeerConnection,
     didRemove candidates: [RTCIceCandidate]
   ) {
-    logger.info("🧊 PeerConnection[\(userId)]: ICE candidates removed")
+    logger.info("🧊 PeerConnection[\(self.userId)]: ICE candidates removed")
   }
 
   func peerConnection(_ peerConnection: RTCPeerConnection, didOpen dataChannel: RTCDataChannel) {
-    logger.info("📡 PeerConnection[\(userId)]: Data channel opened")
+    logger.info("📡 PeerConnection[\(self.userId)]: Data channel opened")
   }
 
   func peerConnectionShouldNegotiate(_ peerConnection: RTCPeerConnection) {
-    logger.info("🔄 PeerConnection[\(userId)]: Should negotiate")
+    logger.info("🔄 PeerConnection[\(self.userId)]: Should negotiate")
   }
 
   func peerConnection(
     _ peerConnection: RTCPeerConnection,
     didChange newState: RTCIceConnectionState
   ) {
-    logger.info("🧊 PeerConnection[\(userId)]: ICE connection state changed to \(String(describing: newState))")
+    logger.info("🧊 PeerConnection[\(self.userId)]: ICE connection state changed to \(String(describing: newState))")
 
-    eventsContinuation.yield(.iceConnectionStateChanged(state: newState.description, userId: userId))
+    eventsContinuation.yield(.iceConnectionStateChanged(state: newState.description, userId: self.userId))
   }
 
   func peerConnection(
     _ peerConnection: RTCPeerConnection,
     didChange newState: RTCIceGatheringState
   ) {
-    logger.info("🧊 PeerConnection[\(userId)]: ICE gathering state changed to \(String(describing: newState))")
+    logger.info("🧊 PeerConnection[\(self.userId)]: ICE gathering state changed to \(String(describing: newState))")
   }
 
   func peerConnection(
     _ peerConnection: RTCPeerConnection,
     didChange newState: RTCPeerConnectionState
   ) {
-    logger.info("🔗 PeerConnection[\(userId)]: Peer connection state changed to \(String(describing: newState))")
+    logger.info("🔗 PeerConnection[\(self.userId)]: Peer connection state changed to \(String(describing: newState))")
 
-    eventsContinuation.yield(.connectionStateChanged(state: newState.description, userId: userId))
+    eventsContinuation.yield(.connectionStateChanged(state: newState.description, userId: self.userId))
   }
 }

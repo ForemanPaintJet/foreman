@@ -10,6 +10,8 @@ import ComposableArchitecture
 import Foundation
 import OSLog
 import SwiftUI
+import WebRTC
+import WebRTCCore
 
 // MARK: - WebRTC Socket Feature
 
@@ -158,7 +160,7 @@ struct WebRTCSocketFeature {
         Action
     > {
         @Dependency(\.socketClient) var socketClient
-        @Dependency(\.webRTCClient) var webRTCClient
+        @Dependency(\.webRTCEngine) var webRTCEngine
 
         switch action {
         case .task:
@@ -210,20 +212,28 @@ struct WebRTCSocketFeature {
 
                     // WebRTC streams
                     group.addTask {
-                        for await offer in await webRTCClient.offerStream() {
+                        for await event in await webRTCEngine.events() {
+                          switch event {
+                          case .offerGenerated(let sdp, let userId):
+                            let offer = WebRTCOffer(sdp: sdp, type: "offer", clientId: userId, videoSource: "")
                             await send(._internal(.webRTCOfferGenerated(offer)))
-                        }
-                    }
-
-                    group.addTask {
-                        for await answer in await webRTCClient.answerStream() {
+                          case .answerGenerated(let sdp, let userId):
+                            let answer = WebRTCAnswer(sdp: sdp, type: "answer", clientId: userId, videoSource: "")
                             await send(._internal(.webRTCAnswerGenerated(answer)))
-                        }
-                    }
-
-                    group.addTask {
-                        for await candidate in await webRTCClient.iceCandidateStream() {
-                            await send(._internal(.webRTCIceCandidateGenerated(candidate)))
+                          case .iceCandidateGenerated(let candidate, let sdpMLineIndex, let sdpMid, let userId):
+                            let iceCandidate = ICECandidate(
+                              type: "ice",
+                              clientId: userId,
+                              candidate: .init(
+                                candidate: candidate,
+                                sdpMLineIndex: sdpMLineIndex,
+                                sdpMid: sdpMid
+                              )
+                            )
+                            await send(._internal(.webRTCIceCandidateGenerated(iceCandidate)))
+                          default:
+                            break
+                          }
                         }
                     }
                 }
@@ -367,13 +377,13 @@ struct WebRTCSocketFeature {
             return .run { send in
                 do {
                     // Create peer connection if it doesn't exist
-                    let created = await webRTCClient.createPeerConnection(userId)
+                    let created = await webRTCEngine.createPeerConnection(userId)
                     if created {
                         await send(._internal(.peerConnectionCreated(userId)))
                     }
 
                     // Create offer
-                    try await webRTCClient.createOffer(userId)
+                    try await webRTCEngine.createOffer(userId)
                 } catch {
                     await send(
                         ._internal(
@@ -388,7 +398,7 @@ struct WebRTCSocketFeature {
         -> Effect<Action>
     {
         @Dependency(\.socketClient) var socketClient
-        @Dependency(\.webRTCClient) var webRTCClient
+        @Dependency(\.webRTCEngine) var webRTCEngine
 
         switch action {
         case .setLoading(let item, let isLoading):
@@ -453,7 +463,8 @@ struct WebRTCSocketFeature {
             return .run { send in
                 do {
                     logger.info("🔥 TCA: About to handle remote offer with WebRTC client")
-                    try await webRTCClient.handleRemoteOffer(offer)
+                    let remoteOffer = RTCSessionDescription(type: .offer, sdp: offer.sdp)
+                    try await webRTCEngine.setRemoteOffer(remoteOffer, offer.clientId)
                     logger.info("🔥 TCA: Successfully handled remote offer")
                 } catch {
                     logger.error("🔥 TCA: Failed to handle remote offer: \(error)")
@@ -471,7 +482,8 @@ struct WebRTCSocketFeature {
             // Handle the incoming answer with WebRTC
             return .run { send in
                 do {
-                    try await webRTCClient.handleRemoteAnswer(answer)
+                    let remoteAnswer = RTCSessionDescription(type: .answer, sdp: answer.sdp)
+                    try await webRTCEngine.setRemoteAnswer(remoteAnswer, answer.clientId)
                 } catch {
                     await send(
                         ._internal(
@@ -487,7 +499,12 @@ struct WebRTCSocketFeature {
             // Handle the incoming ICE candidate with WebRTC
             return .run { send in
                 do {
-                    try await webRTCClient.handleRemoteIceCandidate(candidate)
+                    let iceCandidate = RTCIceCandidate(
+                      sdp: candidate.candidate.candidate,
+                      sdpMLineIndex: Int32(candidate.candidate.sdpMLineIndex),
+                      sdpMid: candidate.candidate.sdpMid
+                    )
+                    try await webRTCEngine.addIceCandidate(iceCandidate, candidate.clientId)
                 } catch {
                     await send(
                         ._internal(
@@ -527,7 +544,7 @@ struct WebRTCSocketFeature {
             // Remove all peer connections when leaving room
             return .run { [connectedUsers = state.connectedUsers] send in
                 for userId in connectedUsers {
-                    await webRTCClient.removePeerConnection(userId)
+                    await webRTCEngine.removePeerConnection(userId)
                     await send(._internal(.peerConnectionRemoved(userId)))
                 }
             }
@@ -583,7 +600,7 @@ struct WebRTCSocketFeature {
 
     private func executeDisconnect(state: inout State) -> Effect<Action> {
         @Dependency(\.socketClient) var socketClient
-        @Dependency(\.webRTCClient) var webRTCClient
+        @Dependency(\.webRTCEngine) var webRTCEngine
         return .run {
             [
                 isJoinedToRoom = state.isJoinedToRoom, roomId = state.roomId,
@@ -600,7 +617,7 @@ struct WebRTCSocketFeature {
 
                     // Remove all peer connections when leaving room
                     for userId in connectedUsers {
-                        await webRTCClient.removePeerConnection(userId)
+                        await webRTCEngine.removePeerConnection(userId)
                         await send(._internal(.peerConnectionRemoved(userId)))
                     }
                 }

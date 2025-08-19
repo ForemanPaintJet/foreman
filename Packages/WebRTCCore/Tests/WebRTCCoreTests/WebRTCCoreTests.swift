@@ -11,14 +11,14 @@ import XCTest
 final class WebRTCCoreTests: XCTestCase {
 
   func testWebRTCEngineInitialization() async {
-    let engine = await MainActor.run { WebRTCEngine() }
-    let connectedPeers = await MainActor.run { engine.connectedPeers }
-    let videoTracks = await MainActor.run { engine.videoTracks }
+    let engine = WebRTCEngine()
+    let connectedPeers = await engine.connectedPeers
+    let videoTracks = await engine.videoTracks
     
     XCTAssertNotNil(engine)
     XCTAssertEqual(connectedPeers.count, 0)
     XCTAssertEqual(videoTracks.count, 0)
-    XCTAssertNotNil(engine.events, "Events stream should be initialized")
+    XCTAssertNotNil(await engine.events, "Events stream should be initialized")
   }
 
   func testVideoTrackInfoEquality() {

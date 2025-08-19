@@ -12,27 +12,15 @@ import WebRTC
 // MARK: - WebRTC Engine
 
 /// Core WebRTC engine that handles peer connections and media streams
-/// This class is focused solely on WebRTC functionality, with no signaling logic
+/// This class is focused solely on WebRTC functionality, with no signaling logic  
 /// Uses AsyncStream for modern event handling instead of delegate pattern
-@MainActor
-public class WebRTCEngine: NSObject, ObservableObject {
+public actor WebRTCEngine {
 
   // MARK: - Public Properties
-
-  /// Currently active video tracks from remote peers
-  @Published public private(set) var remoteVideoTracks: [VideoTrackInfo] = []
-
-  /// Current peer connection states
-  @Published public private(set) var connectionStates: [PeerConnectionInfo] = []
 
   /// List of currently connected peer user IDs
   public var connectedPeers: [String] {
     Array(peerConnections.keys)
-  }
-
-  /// Current video tracks organized by user ID
-  public var videoTracks: [VideoTrackInfo] {
-    remoteVideoTracks
   }
 
   /// Event stream for WebRTC events (replaces delegate pattern)
@@ -57,21 +45,15 @@ public class WebRTCEngine: NSObject, ObservableObject {
 
   // MARK: - Initialization
 
-  public override init() {
+  public init() {
     // Initialize event stream
     let (stream, continuation) = AsyncStream.makeStream(of: WebRTCEvent.self)
     self.events = stream
     self.eventsContinuation = continuation
     
-    super.init()
     setupWebRTC()
     
-    // Start internal event handling
-    Task { @MainActor in
-      for await event in self.events {
-        self.handleWebRTCEvent(event)
-      }
-    }
+    // Events are handled externally by TCA features
   }
 
   // MARK: - Setup
@@ -147,7 +129,6 @@ public class WebRTCEngine: NSObject, ObservableObject {
     peerConnection.addTransceiver(of: .video, init: videoTransceiverInit)
 
     peerConnections[userId] = peerConnection
-    updateConnectionState(for: userId, state: peerConnection.connectionState)
 
     logger.info("✅ WebRTCEngine: Peer connection created for \(userId)")
     return true
@@ -164,8 +145,6 @@ public class WebRTCEngine: NSObject, ObservableObject {
     }
 
     peerConnectionDelegates.removeValue(forKey: userId)
-    remoteVideoTracks.removeAll { $0.userId == userId }
-    connectionStates.removeAll { $0.userId == userId }
 
     eventsContinuation.yield(.videoTrackRemoved(userId: userId))
 
@@ -288,37 +267,6 @@ public class WebRTCEngine: NSObject, ObservableObject {
   }
 
   // MARK: - Internal Methods
-
-  /// Handle events from AsyncStream internally
-  private func handleWebRTCEvent(_ event: WebRTCEvent) {
-    switch event {
-    case .videoTrackAdded(let trackInfo):
-      // Update internal state
-      if !remoteVideoTracks.contains(where: { $0.userId == trackInfo.userId }) {
-        remoteVideoTracks.append(trackInfo)
-        logger.info("✅ WebRTCEngine: Added remote video track for \(trackInfo.userId)")
-      }
-    
-    case .connectionStateChanged(let stateString, let userId):
-      // Update connection states - we need to convert string back to RTCPeerConnectionState
-      // This is a limitation of using string in events, but keeps events Sendable
-      if let connection = peerConnections[userId] {
-        let state = connection.connectionState
-        if let index = connectionStates.firstIndex(where: { $0.userId == userId }) {
-          connectionStates[index] = PeerConnectionInfo(userId: userId, connectionState: state)
-        } else {
-          connectionStates.append(PeerConnectionInfo(userId: userId, connectionState: state))
-        }
-        logger.info("🔗 WebRTCEngine: Connection state for \(userId): \(stateString)")
-      }
-    
-    case .videoTrackRemoved(let userId):
-      remoteVideoTracks.removeAll { $0.userId == userId }
-      logger.info("📺 WebRTCEngine: Removed video track for \(userId)")
-      
-    default:
-      // Other events are handled externally by signaling layer
-      break
-    }
-  }
+  
+  // Internal state management is handled by TCA features through the events stream
 }

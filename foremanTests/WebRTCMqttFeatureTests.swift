@@ -9,6 +9,8 @@ import ComposableArchitecture
 import MQTTNIO
 import NIOCore
 import Testing
+import WebRTC
+import WebRTCCore
 
 @testable import foreman
 
@@ -122,7 +124,7 @@ struct WebRTCMqttFeatureTests {
     func testOfferReceived() async throws {
         let store = TestStore(
             initialState: WebRTCMqttFeature.State(), reducer: { WebRTCMqttFeature() }){
-                $0.webRTCClient.handleRemoteOffer = { _ in
+                $0.webRTCEngine.setRemoteOffer = { _, _ in
                     throw Unimplemented("")
                 }
             }
@@ -146,7 +148,7 @@ struct WebRTCMqttFeatureTests {
     func testAnswerReceived() async throws {
         let store = TestStore(
             initialState: WebRTCMqttFeature.State(), reducer: { WebRTCMqttFeature() }) {
-                $0.webRTCClient.handleRemoteAnswer = { _ in
+                $0.webRTCEngine.setRemoteAnswer = { _, _ in
                     throw Unimplemented("")
                 }
             }
@@ -170,7 +172,7 @@ struct WebRTCMqttFeatureTests {
     func testIceCandidateReceived() async throws {
         let store = TestStore(
             initialState: WebRTCMqttFeature.State(), reducer: { WebRTCMqttFeature() }) {
-                $0.webRTCClient.handleRemoteIceCandidate = { _ in
+                $0.webRTCEngine.addIceCandidate = { _, _ in
                     throw Unimplemented("")
                 }
             }

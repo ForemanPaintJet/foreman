@@ -23,11 +23,8 @@ struct WebRTCMqttView: View {
             Group {
                 if store.isJoinedToRoom {
                     DirectVideoCallView(
-                        store: .init(
-                            initialState: DirectVideoCallFeature.State(),
-                            reducer: {
-                                DirectVideoCallFeature()
-                            }))
+                        store: store.scope(state: \.directVideoCall, action: \.directVideoCall)
+                    )
                 } else {
                     VStack {
                         Spacer()

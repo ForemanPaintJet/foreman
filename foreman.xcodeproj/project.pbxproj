@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		41B1ADC82E541AC70033F5D5 /* WebRTCCore in Frameworks */ = {isa = PBXBuildFile; productRef = 41B1ADC72E541AC70033F5D5 /* WebRTCCore */; };
 		41B494572E16BA3900890E09 /* ComposableArchitecture in Frameworks */ = {isa = PBXBuildFile; productRef = 41B494562E16BA3900890E09 /* ComposableArchitecture */; };
 		41B494592E16BA3A00890E09 /* WebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = 41B494582E16BA3A00890E09 /* WebRTC */; };
 		41CE97EF2E29FD0500C7FAAF /* MqttClientKit in Frameworks */ = {isa = PBXBuildFile; productRef = 41CE97EE2E29FD0500C7FAAF /* MqttClientKit */; };
@@ -61,6 +62,7 @@
 			files = (
 				41B494572E16BA3900890E09 /* ComposableArchitecture in Frameworks */,
 				41DECCD22E1E55D800C52C6F /* ForemanThemeCore in Frameworks */,
+				41B1ADC82E541AC70033F5D5 /* WebRTCCore in Frameworks */,
 				41CE97EF2E29FD0500C7FAAF /* MqttClientKit in Frameworks */,
 				41B494592E16BA3A00890E09 /* WebRTC in Frameworks */,
 			);
@@ -135,6 +137,7 @@
 				41B494582E16BA3A00890E09 /* WebRTC */,
 				41DECCD12E1E55D800C52C6F /* ForemanThemeCore */,
 				41CE97EE2E29FD0500C7FAAF /* MqttClientKit */,
+				41B1ADC72E541AC70033F5D5 /* WebRTCCore */,
 			);
 			productName = foreman;
 			productReference = 41A1FB7A2E16AF3200A9EDA5 /* foreman.app */;
@@ -665,6 +668,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		41B1ADC72E541AC70033F5D5 /* WebRTCCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 41A426532E5372E8005BDF4D /* XCLocalSwiftPackageReference "Packages/WebRTCCore" */;
+			productName = WebRTCCore;
+		};
 		41B494562E16BA3900890E09 /* ComposableArchitecture */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 41B4944F2E16B07100890E09 /* XCRemoteSwiftPackageReference "swift-composable-architecture" */;

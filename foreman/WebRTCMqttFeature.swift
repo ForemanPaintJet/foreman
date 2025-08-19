@@ -13,6 +13,8 @@ import MqttClientKit
 import NIOCore
 import OSLog
 import SwiftUI
+import WebRTC
+import WebRTCCore
 
 // MARK: - WebRTC MQTT Feature
 
@@ -35,7 +37,7 @@ struct WebRTCMqttFeature {
         var loadingItems: Set<LoadingItem> = []
         var connectionStatus: MqttClientKit.State = .idle
         var mqttInfo: MqttClientKitInfo = .init(
-            address: "192.168.1.122", port: 1883, clientID: "")
+            address: "192.168.1.124", port: 1883, clientID: "")
 
         var userId: String = ""
         var connectedUsers: [String] = []
@@ -47,6 +49,10 @@ struct WebRTCMqttFeature {
         var pendingOffers: [WebRTCOffer] = []
         var pendingAnswers: [WebRTCAnswer] = []
         var pendingIceCandidates: [ICECandidate] = []
+        var remoteVideoTracks: [VideoTrackInfo] = []
+        var connectionStates: [PeerConnectionInfo] = []
+        
+        var directVideoCall: DirectVideoCallFeature.State = DirectVideoCallFeature.State()
 
         @Presents var alert: AlertState<Action.Alert>?
 
@@ -63,6 +69,7 @@ struct WebRTCMqttFeature {
         case _internal(InternalAction)
         case delegate(DelegateAction)
         case alert(PresentationAction<Alert>)
+        case directVideoCall(DirectVideoCallFeature.Action)
 
         @CasePathable
         enum ViewAction: Equatable {
@@ -104,6 +111,7 @@ struct WebRTCMqttFeature {
             case webRTCIceCandidateGenerated(ICECandidate)
             case peerConnectionCreated(String)
             case peerConnectionRemoved(String)
+            case webRTCEvent(WebRTCEvent)
         }
 
         enum DelegateAction: Equatable {
@@ -134,6 +142,9 @@ struct WebRTCMqttFeature {
 
     var body: some ReducerOf<Self> {
         BindingReducer()
+        Scope(state: \.directVideoCall, action: \.directVideoCall) {
+            DirectVideoCallFeature()
+        }
         Reduce(core)
             .ifLet(\.$alert, action: \.alert)
     }
@@ -153,6 +164,9 @@ struct WebRTCMqttFeature {
             return handleInternalAction(into: &state, action: internalAction)
 
         case .delegate:
+            return .none
+            
+        case .directVideoCall:
             return .none
 
         case .alert(.presented(.confirmDisconnect)):
@@ -174,7 +188,7 @@ struct WebRTCMqttFeature {
         Action
     > {
         @Dependency(\.mqttClientKit) var mqttClientKit
-        @Dependency(\.webRTCClient) var webRTCClient
+        @Dependency(\.webRTCEngine) var webRTCEngine
 
         switch action {
         case .task:
@@ -186,13 +200,36 @@ struct WebRTCMqttFeature {
                 await withTaskGroup(of: Void.self) { group in
                     // WebRTC streams
                     group.addTask {
-                        for await offer in await webRTCClient.offerStream() {
+                        for await event in webRTCEngine.events() {
+                          switch event {
+                          case .offerGenerated(let sdp, let userId):
+                            let offer = WebRTCOffer(sdp: sdp, type: "offer", clientId: userId, videoSource: "")
                             await send(._internal(.webRTCOfferGenerated(offer)))
-                        }
-                    }
-                    group.addTask {
-                        for await candidate in await webRTCClient.iceCandidateStream() {
-                            await send(._internal(.webRTCIceCandidateGenerated(candidate)))
+                          case .answerGenerated(let sdp, let userId):
+                            let answer = WebRTCAnswer(sdp: sdp, type: "answer", clientId: userId, videoSource: "")
+                            await send(._internal(.webRTCAnswerGenerated(answer)))
+                          case .iceCandidateGenerated(let candidate, let sdpMLineIndex, let sdpMid, let userId):
+                            let iceCandidate = ICECandidate(
+                              type: "ice",
+                              clientId: userId,
+                              candidate: .init(
+                                candidate: candidate,
+                                sdpMLineIndex: sdpMLineIndex,
+                                sdpMid: sdpMid
+                              )
+                            )
+                            await send(._internal(.webRTCIceCandidateGenerated(iceCandidate)))
+                          case .videoTrackAdded(let trackInfo):
+                              await send(._internal(.webRTCEvent(.videoTrackAdded(trackInfo: trackInfo))))
+                          case .videoTrackRemoved(let userId):
+                              await send(._internal(.webRTCEvent(.videoTrackRemoved(userId: userId))))
+                          case .connectionStateChanged(let state, let userId):
+                              await send(._internal(.webRTCEvent(.connectionStateChanged(state: state, userId: userId))))
+                          case .iceConnectionStateChanged(let state, let userId):
+                              await send(._internal(.webRTCEvent(.iceConnectionStateChanged(state: state, userId: userId))))
+                          default:
+                            break
+                          }
                         }
                     }
                 }
@@ -357,11 +394,11 @@ struct WebRTCMqttFeature {
         case .createOfferForUser(let userId):
             return .run { send in
                 do {
-                    let created = await webRTCClient.createPeerConnection(userId)
+                    let created = await webRTCEngine.createPeerConnection(userId)
                     if created {
                         await send(._internal(.peerConnectionCreated(userId)))
                     }
-                    try await webRTCClient.createOffer(userId)
+                    try await webRTCEngine.createOffer(userId)
                 } catch {
                     await send(
                         ._internal(
@@ -376,7 +413,7 @@ struct WebRTCMqttFeature {
         -> Effect<Action>
     {
         @Dependency(\.mqttClientKit) var mqttClientKit
-        @Dependency(\.webRTCClient) var webRTCClient
+        @Dependency(\.webRTCEngine) var webRTCEngine
 
         switch action {
         case .setLoading(let item, let isLoading):
@@ -480,7 +517,8 @@ struct WebRTCMqttFeature {
             let userId = state.userId
             return .run { send in
                 do {
-                    let description = try await webRTCClient.handleRemoteOffer(offer)
+                    let remoteOffer = RTCSessionDescription(type: .offer, sdp: offer.sdp)
+                    let description = try await webRTCEngine.setRemoteOffer(remoteOffer, offer.clientId)
                     let answer = WebRTCAnswer(sdp: description.sdp, type: "answer", clientId: userId, videoSource: "")
                     await send(._internal(.webRTCAnswerGenerated(answer)))
                 } catch {
@@ -499,7 +537,8 @@ struct WebRTCMqttFeature {
             state.pendingAnswers.append(answer)
             return .run { send in
                 do {
-                    try await webRTCClient.handleRemoteAnswer(answer)
+                    let remoteAnswer = RTCSessionDescription(type: .answer, sdp: answer.sdp)
+                    try await webRTCEngine.setRemoteAnswer(remoteAnswer, answer.clientId)
                 } catch {
                     await send(
                         ._internal(
@@ -516,7 +555,12 @@ struct WebRTCMqttFeature {
             state.pendingIceCandidates.append(candidate)
             return .run { send in
                 do {
-                    try await webRTCClient.handleRemoteIceCandidate(candidate)
+                    let iceCandidate = RTCIceCandidate(
+                      sdp: candidate.candidate.candidate,
+                      sdpMLineIndex: Int32(candidate.candidate.sdpMLineIndex),
+                      sdpMid: candidate.candidate.sdpMid
+                    )
+                    try await webRTCEngine.addIceCandidate(iceCandidate, candidate.clientId)
                 } catch {
                     await send(
                         ._internal(
@@ -569,7 +613,7 @@ struct WebRTCMqttFeature {
             state.connectedUsers = []
             return .run { send in
                 for userId in connectedUsers {
-                    await webRTCClient.removePeerConnection(userId)
+                    await webRTCEngine.removePeerConnection(userId)
                     await send(._internal(.peerConnectionRemoved(userId)))
                 }
             }
@@ -628,17 +672,56 @@ struct WebRTCMqttFeature {
 
         case .peerConnectionRemoved(let userId):
             return .none
+            
+        case .webRTCEvent(let event):
+            return handleWebRTCEvent(into: &state, event: event)
         }
     }
 
     // MARK: - Helper Functions
+    
+    private func handleWebRTCEvent(into state: inout State, event: WebRTCEvent) -> Effect<Action> {
+        switch event {
+        case .videoTrackAdded(let trackInfo):
+            if !state.remoteVideoTracks.contains(where: { $0.userId == trackInfo.userId }) {
+                state.remoteVideoTracks.append(trackInfo)
+            }
+            // 直接更新子 feature 的 WebRTC 狀態
+            state.directVideoCall.remoteVideoTracks = state.remoteVideoTracks
+            state.directVideoCall.connectionStates = state.connectionStates
+            return .none
+            
+        case .videoTrackRemoved(let userId):
+            state.remoteVideoTracks.removeAll { $0.userId == userId }
+            // 直接更新子 feature 的 WebRTC 狀態
+            state.directVideoCall.remoteVideoTracks = state.remoteVideoTracks
+            state.directVideoCall.connectionStates = state.connectionStates
+            return .none
+            
+        case .connectionStateChanged(let stateString, let userId):
+            // Update connection states if we have a PeerConnectionInfo structure
+            // For now, we'll just update child feature state
+            state.directVideoCall.remoteVideoTracks = state.remoteVideoTracks
+            state.directVideoCall.connectionStates = state.connectionStates
+            return .none
+            
+        case .iceConnectionStateChanged(let stateString, let userId):
+            // Update ICE connection states if needed
+            state.directVideoCall.remoteVideoTracks = state.remoteVideoTracks
+            state.directVideoCall.connectionStates = state.connectionStates
+            return .none
+            
+        default:
+            return .none
+        }
+    }
 
     private func executeDisconnect(state: inout State) -> Effect<Action> {
         let connectedUsers = state.connectedUsers
         let isJoinedToRoom = state.isJoinedToRoom
 
         @Dependency(\.mqttClientKit) var mqttClientKit
-        @Dependency(\.webRTCClient) var webRTCClient
+        @Dependency(\.webRTCEngine) var webRTCEngine
 
         return .run { send in
             do {
@@ -649,7 +732,7 @@ struct WebRTCMqttFeature {
                     await send(.delegate(.didLeaveRoom))
                     await send(._internal(.setLoading(.leavingRoom, false)))
                     for userId in connectedUsers {
-                        await webRTCClient.removePeerConnection(userId)
+                        await webRTCEngine.removePeerConnection(userId)
                         await send(._internal(.peerConnectionRemoved(userId)))
                     }
                 }
