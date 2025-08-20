@@ -6,7 +6,7 @@ import PackageDescription
 let package = Package(
     name: "WebRTCCore",
     platforms: [
-        .iOS(.v15),
+        .iOS(.v17),
         .macOS(.v14),
     ],
     products: [
@@ -39,9 +39,9 @@ let package = Package(
                 "WebRTCCore",
                 .product(name: "CustomDump", package: "swift-custom-dump"),
             ],
-            exclude: [
-                "WebRTCFeatureTests.swift",
-            ]
+//            exclude: [
+//                "WebRTCFeatureTests.swift",
+//            ]
         ),
     ]
 )

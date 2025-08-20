@@ -16,16 +16,21 @@ import XCTest
 final class WebRTCFeatureTests: XCTestCase {
 
     func test_task_startsListening() async {
+        let eventstream = AsyncStream.makeStream(of: WebRTCEvent.self)
         let store = TestStore(initialState: WebRTCFeature.State()) {
             WebRTCFeature()
         } withDependencies: {
-            $0.webRTCEngine = WebRTCDependency()
+            $0.webRTCEngine.events = { eventstream.stream }
         }
-
+        
         await store.send(\.view, .task)
         await store.receive(\.startListening) {
             $0.isListening = true
         }
+        
+        eventstream.continuation.finish()
+        
+        await store.finish()
     }
 
     func test_createPeerConnection_success() async {
@@ -36,7 +41,7 @@ final class WebRTCFeatureTests: XCTestCase {
         }
 
         await store.send(\.view, .createPeerConnection(userId: "user123"))
-        await store.receive(\.createPeerConnectionResult, ("user123", true)) {
+        await store.receive(.createPeerConnectionResult("user123", true)) {
             $0.connectedPeers = [
                 WebRTCFeature.PeerState(id: "user123", connectionState: .connecting)
             ]
@@ -51,8 +56,8 @@ final class WebRTCFeatureTests: XCTestCase {
         }
 
         await store.send(\.view, .createPeerConnection(userId: "user123"))
-        await store.receive(\.createPeerConnectionResult, ("user123", false))
-        await store.receive(\.errorOccurred, (WebRTCError.peerConnectionNotFound, "user123")) {
+        await store.receive(.createPeerConnectionResult("user123", false))
+        await store.receive(.errorOccurred(WebRTCError.peerConnectionNotFound, "user123")) {
             $0.error = .peerConnectionNotFound
         }
         await store.receive(\.delegate, .errorOccurred(.peerConnectionNotFound, userId: "user123"))
@@ -70,7 +75,7 @@ final class WebRTCFeatureTests: XCTestCase {
         } withDependencies: {
             $0.webRTCEngine.removePeerConnection = { _ in }
         }
-
+        
         await store.send(\.view, .removePeerConnection(userId: "user123"))
         await store.receive(\.removePeerConnectionCompleted, "user123") {
             $0.connectedPeers = []
@@ -97,7 +102,7 @@ final class WebRTCFeatureTests: XCTestCase {
         }
 
         await store.send(\.view, .createOffer(userId: "user123"))
-        await store.receive(\.errorOccurred, (WebRTCError.failedToCreateOffer, "user123")) {
+        await store.receive(.errorOccurred(WebRTCError.failedToCreateOffer, "user123")) {
             $0.error = .failedToCreateOffer
         }
         await store.receive(\.delegate, .errorOccurred(.failedToCreateOffer, userId: "user123"))
@@ -114,7 +119,7 @@ final class WebRTCFeatureTests: XCTestCase {
         }
 
         await store.send(\.view, .handleRemoteOffer(mockOffer, userId: "user123"))
-        await store.receive(\.remoteOfferHandled, ("user123", mockAnswer))
+        await store.receive(.remoteOfferHandled("user123", mockAnswer))
     }
 
     func test_handleRemoteAnswer_success() async {

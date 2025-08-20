@@ -23,8 +23,6 @@ package struct WebRTCFeature {
         package var localConnectionState: ConnectionState = .disconnected
         package var error: WebRTCError?
         package var isListening = false
-
-        package init() {}
     }
 
     // MARK: - Peer State
