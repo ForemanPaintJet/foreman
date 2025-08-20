@@ -8,6 +8,7 @@
 import Testing
 import WebRTC
 import MqttClientKit
+import WebRTCCore
 
 @testable import foreman
 
@@ -91,56 +92,6 @@ struct ModelsTests {
       #expect(info1.connectionState == .connected)
     }
   }
-  
-  @Suite("Socket Models")
-  struct SocketModelsTests {
-    @Test("SocketMessage equality and properties")
-    func testSocketMessage() async throws {
-      let message1 = SocketMessage(type: "offer", data: ["sdp": "test-sdp", "clientId": "client1"])
-      let message2 = SocketMessage(type: "offer", data: ["sdp": "test-sdp", "clientId": "client1"])
-      let message3 = SocketMessage(type: "answer", data: ["sdp": "test-sdp", "clientId": "client1"])
-      let message4 = SocketMessage(type: "offer", data: nil)
-      
-      #expect(message1 == message2)
-      #expect(message1 != message3)
-      #expect(message1 != message4)
-      #expect(message1.type == "offer")
-      #expect(message1.data?["sdp"] == "test-sdp")
-      #expect(message4.data == nil)
-    }
-    
-    @Test("RoomInfo properties")
-    func testRoomInfo() async throws {
-      let room1 = RoomInfo(roomId: "room1", userCount: 3, users: ["user1", "user2", "user3"])
-      let room2 = RoomInfo(roomId: "room1", userCount: 3, users: ["user1", "user2", "user3"])
-      let room3 = RoomInfo(roomId: "room2", userCount: 3, users: ["user1", "user2", "user3"])
-      
-      #expect(room1 == room2)
-      #expect(room1 != room3)
-      #expect(room1.roomId == "room1")
-      #expect(room1.userCount == 3)
-      #expect(room1.users.count == 3)
-      #expect(room1.users.contains("user1"))
-    }
-    
-    @Test("ConnectionStatus enum")
-    func testConnectionStatus() async throws {
-      let status1: ConnectionStatus = .connected
-      let status2: ConnectionStatus = .connected
-      let status3: ConnectionStatus = .disconnected
-      
-      #expect(status1 == status2)
-      #expect(status1 != status3)
-      #expect(status1.rawValue == "Connected")
-      #expect(status3.rawValue == "Disconnected")
-      
-      // Test all cases
-      let allCases = ConnectionStatus.allCases
-      #expect(allCases.contains(.disconnected))
-      #expect(allCases.contains(.connecting))
-      #expect(allCases.contains(.connected))
-      #expect(allCases.contains(.error))
-    }
     
     @Test("RequestVideoMessage properties")
     func testRequestVideoMessage() async throws {
@@ -187,20 +138,6 @@ struct ModelsTests {
     }
   }
   
-  @Suite("Socket Errors")
-  struct SocketErrorsTests {
-    @Test("SocketError cases and descriptions")
-    func testSocketError() async throws {
-      let error1 = SocketError.notConnected
-      let error2 = SocketError.invalidURL
-      let error3 = SocketError.connectionFailed
-      
-      #expect(error1.errorDescription == "Socket not connected")
-      #expect(error2.errorDescription == "Invalid URL")
-      #expect(error3.errorDescription == "Connection failed")
-    }
-  }
-  
   @Suite("MQTT Models")
   struct MqttModelsTests {
     @Test("MqttClientKitInfo properties")
@@ -216,4 +153,3 @@ struct ModelsTests {
       #expect(info1.clientID == "client1")
     }
   }
-}

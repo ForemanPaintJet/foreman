@@ -16,6 +16,24 @@ import SwiftUI
 import WebRTC
 import WebRTCCore
 
+// MARK: - Video Request Models
+
+struct RequestVideoMessage: Codable, Equatable {
+    var type: String = "requestVideo"
+    let clientId: String
+    let videoSource: String
+    // Optional: resolution, format, etc.
+    // let resolution: String?
+    // let format: String?
+}
+
+struct LeaveVideoMessage: Codable, Equatable {
+    var type: String = "leaveVideo"
+    let clientId: String
+    let videoSource: String
+}
+
+
 // MARK: - WebRTC MQTT Feature
 
 let inputTopic = "camera_system/streaming/in"
@@ -98,7 +116,6 @@ struct WebRTCMqttFeature {
             case offerReceived(WebRTCOffer)
             case answerReceived(WebRTCAnswer)
             case iceCandidateReceived(ICECandidate)
-            case roomUpdateReceived(RoomInfo)
             case errorOccurred(String)
             case mqttConnected
             case mqttDisconnected
@@ -569,11 +586,6 @@ struct WebRTCMqttFeature {
                             )))
                 }
             }
-
-        case .roomUpdateReceived(let roomInfo):
-            logger.info("🟠 [MQTT] Room update received: users=\(roomInfo.users)")
-            state.connectedUsers = roomInfo.users
-            return .none
 
         case .errorOccurred(let error):
             logger.error("🔴 [WebRTCMqttFeature] Error occurred: \(error)")
