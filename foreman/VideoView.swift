@@ -148,7 +148,6 @@ struct UserLabel: View {
 
 struct VideoCallView: View {
     let remoteVideoTracks: [VideoTrackInfo]
-    let connectionStates: [PeerConnectionInfo]
     private let logger = Logger(subsystem: "foreman", category: "VideoCallView")
 
     var body: some View {
@@ -164,5 +163,5 @@ struct VideoCallView: View {
 }
 
 #Preview {
-    VideoCallView(remoteVideoTracks: [], connectionStates: [])
+    VideoCallView(remoteVideoTracks: [])
 }

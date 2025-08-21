@@ -12,87 +12,11 @@ import WebRTCCore
 
 @testable import foreman
 
-@Suite("Models")
+@Suite("Foreman Specific Models")
 struct ModelsTests {
   
-  @Suite("WebRTC Models")
-  struct WebRTCModelsTests {
-    @Test("WebRTCOffer equality and properties")
-    func testWebRTCOffer() async throws {
-      let offer1 = WebRTCOffer(sdp: "test-sdp", type: "offer", clientId: "client1", videoSource: "camera")
-      let offer2 = WebRTCOffer(sdp: "test-sdp", type: "offer", clientId: "client1", videoSource: "camera")
-      let offer3 = WebRTCOffer(sdp: "different-sdp", type: "offer", clientId: "client1", videoSource: "camera")
-      
-      #expect(offer1 == offer2)
-      #expect(offer1 != offer3)
-      #expect(offer1.sdp == "test-sdp")
-      #expect(offer1.type == "offer")
-      #expect(offer1.clientId == "client1")
-      #expect(offer1.videoSource == "camera")
-    }
-
-    @Test("WebRTCAnswer equality and properties")
-    func testWebRTCAnswer() async throws {
-      let answer1 = WebRTCAnswer(sdp: "test-sdp", type: "answer", clientId: "client1", videoSource: "screen")
-      let answer2 = WebRTCAnswer(sdp: "test-sdp", type: "answer", clientId: "client1", videoSource: "screen")
-      let answer3 = WebRTCAnswer(sdp: "test-sdp", type: "answer", clientId: "client2", videoSource: "screen")
-      
-      #expect(answer1 == answer2)
-      #expect(answer1 != answer3)
-      #expect(answer1.sdp == "test-sdp")
-      #expect(answer1.type == "answer")
-      #expect(answer1.clientId == "client1")
-      #expect(answer1.videoSource == "screen")
-    }
-
-    @Test("ICECandidate nested structure")
-    func testICECandidate() async throws {
-      let candidate = ICECandidate.Candidate(
-        candidate: "candidate:1 1 UDP 2130706431 192.168.1.100 54400 typ host",
-        sdpMLineIndex: 0,
-        sdpMid: "0"
-      )
-      
-      let iceCandidate1 = ICECandidate(type: "ice", clientId: "client1", candidate: candidate)
-      let iceCandidate2 = ICECandidate(type: "ice", clientId: "client1", candidate: candidate)
-      let iceCandidate3 = ICECandidate(type: "ice", clientId: "client2", candidate: candidate)
-      
-      #expect(iceCandidate1 == iceCandidate2)
-      #expect(iceCandidate1 != iceCandidate3)
-      #expect(iceCandidate1.type == "ice")
-      #expect(iceCandidate1.clientId == "client1")
-      #expect(iceCandidate1.candidate.candidate.contains("192.168.1.100"))
-      #expect(iceCandidate1.candidate.sdpMLineIndex == 0)
-      #expect(iceCandidate1.candidate.sdpMid == "0")
-    }
-    
-    @Test("VideoTrackInfo equality")
-    func testVideoTrackInfo() async throws {
-      let track1 = VideoTrackInfo(id: "track1", userId: "user1", track: nil)
-      let track2 = VideoTrackInfo(id: "track1", userId: "user1", track: nil)
-      let track3 = VideoTrackInfo(id: "track2", userId: "user1", track: nil)
-      let track4 = VideoTrackInfo(id: "track1", userId: "user2", track: nil)
-      
-      #expect(track1 == track2)
-      #expect(track1 != track3)
-      #expect(track1 != track4)
-      #expect(track1.id == "track1")
-      #expect(track1.userId == "user1")
-    }
-    
-    @Test("PeerConnectionInfo properties")
-    func testPeerConnectionInfo() async throws {
-      let info1 = PeerConnectionInfo(userId: "user1", connectionState: .connected)
-      let info2 = PeerConnectionInfo(userId: "user1", connectionState: .connected)
-      let info3 = PeerConnectionInfo(userId: "user1", connectionState: .disconnected)
-      
-      #expect(info1 == info2)
-      #expect(info1 != info3)
-      #expect(info1.userId == "user1")
-      #expect(info1.connectionState == .connected)
-    }
-  }
-    
+  @Suite("MQTT Video Messages")
+  struct MqttVideoMessagesTests {
     @Test("RequestVideoMessage properties")
     func testRequestVideoMessage() async throws {
       let request1 = RequestVideoMessage(clientId: "client1", videoSource: "camera")
@@ -118,28 +42,35 @@ struct ModelsTests {
       #expect(leave1.clientId == "client1")
       #expect(leave1.videoSource == "screen")
     }
-  }
-  
-  @Suite("WebRTC Errors")
-  struct WebRTCErrorsTests {
-    @Test("WebRTCError cases and descriptions")
-    func testWebRTCError() async throws {
-      let error1 = WebRTCError.peerConnectionNotFound
-      let error2 = WebRTCError.failedToCreateOffer
-      let error3 = WebRTCError.failedToCreateAnswer
-      let error4 = WebRTCError.failedToSetDescription
-      let error5 = WebRTCError.failedToAddCandidate
+    
+    @Test("RequestVideoMessage different video sources")
+    func testRequestVideoMessageVideoSources() async throws {
+      let cameraRequest = RequestVideoMessage(clientId: "client1", videoSource: "camera")
+      let screenRequest = RequestVideoMessage(clientId: "client1", videoSource: "screen")
+      let micRequest = RequestVideoMessage(clientId: "client1", videoSource: "microphone")
       
-      #expect(error1.errorDescription == "Peer connection not found")
-      #expect(error2.errorDescription == "Failed to create offer")
-      #expect(error3.errorDescription == "Failed to create answer")
-      #expect(error4.errorDescription == "Failed to set session description")
-      #expect(error5.errorDescription == "Failed to add ICE candidate")
+      #expect(cameraRequest != screenRequest)
+      #expect(screenRequest != micRequest)
+      #expect(cameraRequest.videoSource == "camera")
+      #expect(screenRequest.videoSource == "screen")
+      #expect(micRequest.videoSource == "microphone")
+    }
+    
+    @Test("LeaveVideoMessage different scenarios")
+    func testLeaveVideoMessageScenarios() async throws {
+      let cameraLeave = LeaveVideoMessage(clientId: "user1", videoSource: "camera")
+      let screenLeave = LeaveVideoMessage(clientId: "user1", videoSource: "screen")
+      let differentUserLeave = LeaveVideoMessage(clientId: "user2", videoSource: "camera")
+      
+      #expect(cameraLeave != screenLeave)
+      #expect(cameraLeave != differentUserLeave)
+      #expect(cameraLeave.clientId == "user1")
+      #expect(differentUserLeave.clientId == "user2")
     }
   }
   
-  @Suite("MQTT Models")
-  struct MqttModelsTests {
+  @Suite("MQTT Configuration Models")
+  struct MqttConfigurationTests {
     @Test("MqttClientKitInfo properties")
     func testMqttClientKitInfo() async throws {
       let info1 = MqttClientKitInfo(address: "192.168.1.100", port: 1883, clientID: "client1")
@@ -152,4 +83,27 @@ struct ModelsTests {
       #expect(info1.port == 1883)
       #expect(info1.clientID == "client1")
     }
+    
+    @Test("MqttClientKitInfo different ports and client IDs")
+    func testMqttClientKitInfoVariations() async throws {
+      let standardPort = MqttClientKitInfo(address: "broker.local", port: 1883, clientID: "client1")
+      let securePort = MqttClientKitInfo(address: "broker.local", port: 8883, clientID: "client1")
+      let differentClient = MqttClientKitInfo(address: "broker.local", port: 1883, clientID: "client2")
+      
+      #expect(standardPort != securePort)
+      #expect(standardPort != differentClient)
+      #expect(standardPort.port == 1883)
+      #expect(securePort.port == 8883)
+      #expect(differentClient.clientID == "client2")
+    }
   }
+  
+  @Suite("MQTT Topic Constants")
+  struct MqttTopicTests {
+    @Test("MQTT topic constants are correct")
+    func testMqttTopicConstants() async throws {
+      #expect(inputTopic == "camera_system/streaming/in")
+      #expect(outputTopic == "camera_system/streaming/out")
+    }
+  }
+}

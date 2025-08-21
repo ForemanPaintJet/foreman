@@ -30,7 +30,6 @@ struct DirectVideoCallFeature {
         
         // WebRTC state
         var remoteVideoTracks: [VideoTrackInfo] = []
-        var connectionStates: [PeerConnectionInfo] = []
 
         enum AlertType: String, CaseIterable, Equatable {
             case none = "None"
@@ -163,7 +162,7 @@ struct DirectVideoCallView: View {
 
             ZStack {
                 // Main content area
-                VideoCallView(remoteVideoTracks: store.remoteVideoTracks, connectionStates: store.connectionStates)
+                VideoCallView(remoteVideoTracks: store.remoteVideoTracks)
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                     .padding(.all, store.currentAlert == .none ? 0 : 20)
                     .background(

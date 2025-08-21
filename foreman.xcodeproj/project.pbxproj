@@ -7,9 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		416669302E55FC6E0084725B /* WebRTCCore in Frameworks */ = {isa = PBXBuildFile; productRef = 4166692F2E55FC6E0084725B /* WebRTCCore */; };
+		4143EAAB2E574BA90063D0EA /* WebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = 4143EAAA2E574BA90063D0EA /* WebRTC */; };
+		4143EAAE2E5758510063D0EA /* WebRTCCore in Frameworks */ = {isa = PBXBuildFile; productRef = 4143EAAD2E5758510063D0EA /* WebRTCCore */; };
 		41B494572E16BA3900890E09 /* ComposableArchitecture in Frameworks */ = {isa = PBXBuildFile; productRef = 41B494562E16BA3900890E09 /* ComposableArchitecture */; };
-		41B494592E16BA3A00890E09 /* WebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = 41B494582E16BA3A00890E09 /* WebRTC */; };
 		41CE97EF2E29FD0500C7FAAF /* MqttClientKit in Frameworks */ = {isa = PBXBuildFile; productRef = 41CE97EE2E29FD0500C7FAAF /* MqttClientKit */; };
 		41DECCD22E1E55D800C52C6F /* ForemanThemeCore in Frameworks */ = {isa = PBXBuildFile; productRef = 41DECCD12E1E55D800C52C6F /* ForemanThemeCore */; };
 /* End PBXBuildFile section */
@@ -60,11 +60,11 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				4143EAAB2E574BA90063D0EA /* WebRTC in Frameworks */,
 				41B494572E16BA3900890E09 /* ComposableArchitecture in Frameworks */,
+				4143EAAE2E5758510063D0EA /* WebRTCCore in Frameworks */,
 				41DECCD22E1E55D800C52C6F /* ForemanThemeCore in Frameworks */,
-				416669302E55FC6E0084725B /* WebRTCCore in Frameworks */,
 				41CE97EF2E29FD0500C7FAAF /* MqttClientKit in Frameworks */,
-				41B494592E16BA3A00890E09 /* WebRTC in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -134,10 +134,10 @@
 			name = foreman;
 			packageProductDependencies = (
 				41B494562E16BA3900890E09 /* ComposableArchitecture */,
-				41B494582E16BA3A00890E09 /* WebRTC */,
 				41DECCD12E1E55D800C52C6F /* ForemanThemeCore */,
 				41CE97EE2E29FD0500C7FAAF /* MqttClientKit */,
-				4166692F2E55FC6E0084725B /* WebRTCCore */,
+				4143EAAA2E574BA90063D0EA /* WebRTC */,
+				4143EAAD2E5758510063D0EA /* WebRTCCore */,
 			);
 			productName = foreman;
 			productReference = 41A1FB7A2E16AF3200A9EDA5 /* foreman.app */;
@@ -226,7 +226,7 @@
 				41B494502E16B10A00890E09 /* XCRemoteSwiftPackageReference "WebRTC" */,
 				41DECCD02E1E559100C52C6F /* XCLocalSwiftPackageReference "Packages/ForemanThemeCore" */,
 				41CE97ED2E29FCF200C7FAAF /* XCRemoteSwiftPackageReference "MqttClientKit" */,
-				4166692E2E55FC5E0084725B /* XCLocalSwiftPackageReference "Packages/WebRTCCore" */,
+				4143EAAC2E5758420063D0EA /* XCLocalSwiftPackageReference "../WebRTCCore" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 41A1FB7B2E16AF3200A9EDA5 /* Products */;
@@ -630,9 +630,9 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		4166692E2E55FC5E0084725B /* XCLocalSwiftPackageReference "Packages/WebRTCCore" */ = {
+		4143EAAC2E5758420063D0EA /* XCLocalSwiftPackageReference "../WebRTCCore" */ = {
 			isa = XCLocalSwiftPackageReference;
-			relativePath = Packages/WebRTCCore;
+			relativePath = ../WebRTCCore;
 		};
 		41DECCD02E1E559100C52C6F /* XCLocalSwiftPackageReference "Packages/ForemanThemeCore" */ = {
 			isa = XCLocalSwiftPackageReference;
@@ -668,20 +668,20 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		4166692F2E55FC6E0084725B /* WebRTCCore */ = {
+		4143EAAA2E574BA90063D0EA /* WebRTC */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 4166692E2E55FC5E0084725B /* XCLocalSwiftPackageReference "Packages/WebRTCCore" */;
+			package = 41B494502E16B10A00890E09 /* XCRemoteSwiftPackageReference "WebRTC" */;
+			productName = WebRTC;
+		};
+		4143EAAD2E5758510063D0EA /* WebRTCCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4143EAAC2E5758420063D0EA /* XCLocalSwiftPackageReference "../WebRTCCore" */;
 			productName = WebRTCCore;
 		};
 		41B494562E16BA3900890E09 /* ComposableArchitecture */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 41B4944F2E16B07100890E09 /* XCRemoteSwiftPackageReference "swift-composable-architecture" */;
 			productName = ComposableArchitecture;
-		};
-		41B494582E16BA3A00890E09 /* WebRTC */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 41B494502E16B10A00890E09 /* XCRemoteSwiftPackageReference "WebRTC" */;
-			productName = WebRTC;
 		};
 		41CE97EE2E29FD0500C7FAAF /* MqttClientKit */ = {
 			isa = XCSwiftPackageProductDependency;
