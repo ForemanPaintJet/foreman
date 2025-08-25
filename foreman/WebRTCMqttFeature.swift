@@ -32,6 +32,61 @@ struct LeaveVideoMessage: Codable, Equatable {
     let videoSource: String
 }
 
+// MARK: - MQTT JSON Models (Legacy Format for Server Compatibility)
+
+/// MQTT-specific WebRTC Offer model that maintains clientId for server compatibility
+struct MqttWebRTCOffer: Codable, Equatable {
+    let sdp: String
+    let type: String
+    let clientId: String  // Legacy format for server compatibility
+    let videoSource: String
+    
+    init(from webRTCOffer: WebRTCOffer) {
+        self.sdp = webRTCOffer.sdp
+        self.type = webRTCOffer.type
+        self.clientId = webRTCOffer.from  // Convert from -> clientId for outgoing messages
+        self.videoSource = webRTCOffer.videoSource
+    }
+}
+
+/// MQTT-specific WebRTC Answer model that maintains clientId for server compatibility
+struct MqttWebRTCAnswer: Codable, Equatable {
+    let sdp: String
+    let type: String
+    let clientId: String  // Legacy format for server compatibility
+    let videoSource: String
+    
+    init(from webRTCAnswer: WebRTCAnswer) {
+        self.sdp = webRTCAnswer.sdp
+        self.type = webRTCAnswer.type
+        self.clientId = webRTCAnswer.from  // Convert from -> clientId for outgoing messages
+        self.videoSource = webRTCAnswer.videoSource
+    }
+}
+
+/// MQTT-specific ICE Candidate model that maintains clientId for server compatibility
+struct MqttICECandidate: Codable, Equatable {
+    struct Candidate: Codable, Equatable {
+        let candidate: String
+        let sdpMLineIndex: Int
+        let sdpMid: String?
+    }
+    
+    let type: String
+    let clientId: String  // Legacy format for server compatibility
+    let candidate: Candidate
+    
+    init(from iceCandidate: ICECandidate) {
+        self.type = iceCandidate.type
+        self.clientId = iceCandidate.from  // Convert from -> clientId for outgoing messages
+        self.candidate = Candidate(
+            candidate: iceCandidate.candidate.candidate,
+            sdpMLineIndex: iceCandidate.candidate.sdpMLineIndex,
+            sdpMid: iceCandidate.candidate.sdpMid
+        )
+    }
+}
+
 
 // MARK: - WebRTC MQTT Feature
 
@@ -51,7 +106,7 @@ struct WebRTCMqttFeature {
         var loadingItems: Set<LoadingItem> = []
         var connectionStatus: MqttClientKit.State = .idle
         var mqttInfo: MqttClientKitInfo = .init(
-            address: "192.168.1.120", port: 1883, clientID: "")
+            address: "192.168.1.103", port: 1883, clientID: "")
 
         var userId: String = ""
         var connectedUsers: [String] = []
@@ -478,7 +533,9 @@ struct WebRTCMqttFeature {
         case .webRTCOfferGenerated(let offer):
             return .run { send in
                 do {
-                    let payload = try JSONEncoder().encode(offer)
+                    // Convert to MQTT-compatible format with clientId
+                    let mqttOffer = MqttWebRTCOffer(from: offer)
+                    let payload = try JSONEncoder().encode(mqttOffer)
                     let info = MQTTPublishInfo(
                         qos: .atLeastOnce, retain: false, topicName: inputTopic,
                         payload: ByteBuffer(data: payload), properties: .init([]))
@@ -494,7 +551,9 @@ struct WebRTCMqttFeature {
         case .webRTCAnswerGenerated(let answer):
             return .run { send in
                 do {
-                    let payload = try JSONEncoder().encode(answer)
+                    // Convert to MQTT-compatible format with clientId
+                    let mqttAnswer = MqttWebRTCAnswer(from: answer)
+                    let payload = try JSONEncoder().encode(mqttAnswer)
                     let info = MQTTPublishInfo(
                         qos: .atLeastOnce, retain: false, topicName: inputTopic,
                         payload: ByteBuffer(data: payload), properties: .init([]))
@@ -510,7 +569,9 @@ struct WebRTCMqttFeature {
         case .webRTCIceCandidateGenerated(let candidate):
             return .run { send in
                 do {
-                    let payload = try JSONEncoder().encode(candidate)
+                    // Convert to MQTT-compatible format with clientId
+                    let mqttCandidate = MqttICECandidate(from: candidate)
+                    let payload = try JSONEncoder().encode(mqttCandidate)
                     let info = MQTTPublishInfo(
                         qos: .atLeastOnce, retain: false, topicName: inputTopic,
                         payload: ByteBuffer(data: payload), properties: .init([]))
@@ -563,7 +624,7 @@ struct WebRTCMqttFeature {
             
         case let .connectionStateChanged(userId, connectionState):
             // Update DirectVideoCall feature with connection state changes
-            state.directVideoCall.remoteVideoTracks = state.webRTCFeature.connectedPeers.compactMap { $0.videoTrack }
+//            state.directVideoCall.remoteVideoTracks = state.webRTCFeature.connectedPeers.compactMap { $0.videoTrack }
             return .none
             
         case let .errorOccurred(error, userId):

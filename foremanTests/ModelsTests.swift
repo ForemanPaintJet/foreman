@@ -106,4 +106,110 @@ struct ModelsTests {
       #expect(outputTopic == "camera_system/streaming/out")
     }
   }
+  
+  @Suite("MQTT JSON Conversion Models")
+  struct MqttJsonConversionTests {
+    @Test("MqttWebRTCOffer converts from WebRTCOffer correctly")
+    func testMqttWebRTCOfferConversion() async throws {
+      let webRTCOffer = WebRTCOffer(
+        sdp: "test-offer-sdp",
+        type: "offer",
+        from: "client123",
+        to: "server456",
+        videoSource: "camera"
+      )
+      
+      let mqttOffer = MqttWebRTCOffer(from: webRTCOffer)
+      
+      #expect(mqttOffer.sdp == "test-offer-sdp")
+      #expect(mqttOffer.type == "offer")
+      #expect(mqttOffer.clientId == "client123")  // from -> clientId
+      #expect(mqttOffer.videoSource == "camera")
+    }
+    
+    @Test("MqttWebRTCAnswer converts from WebRTCAnswer correctly")
+    func testMqttWebRTCAnswerConversion() async throws {
+      let webRTCAnswer = WebRTCAnswer(
+        sdp: "test-answer-sdp",
+        type: "answer",
+        from: "server456",
+        to: "client123",
+        videoSource: "screen"
+      )
+      
+      let mqttAnswer = MqttWebRTCAnswer(from: webRTCAnswer)
+      
+      #expect(mqttAnswer.sdp == "test-answer-sdp")
+      #expect(mqttAnswer.type == "answer")
+      #expect(mqttAnswer.clientId == "server456")  // from -> clientId
+      #expect(mqttAnswer.videoSource == "screen")
+    }
+    
+    @Test("MqttICECandidate converts from ICECandidate correctly")
+    func testMqttICECandidateConversion() async throws {
+      let iceCandidate = ICECandidate(
+        type: "ice",
+        from: "client123",
+        to: "server456",
+        candidate: ICECandidate.Candidate(
+          candidate: "candidate:test-ice-data",
+          sdpMLineIndex: 0,
+          sdpMid: "0"
+        )
+      )
+      
+      let mqttCandidate = MqttICECandidate(from: iceCandidate)
+      
+      #expect(mqttCandidate.type == "ice")
+      #expect(mqttCandidate.clientId == "client123")  // from -> clientId
+      #expect(mqttCandidate.candidate.candidate == "candidate:test-ice-data")
+      #expect(mqttCandidate.candidate.sdpMLineIndex == 0)
+      #expect(mqttCandidate.candidate.sdpMid == "0")
+    }
+    
+    @Test("MQTT models are JSON serializable with clientId format")
+    func testMqttModelsJSONSerialization() async throws {
+      let webRTCOffer = WebRTCOffer(
+        sdp: "test-sdp",
+        type: "offer",
+        from: "user123",
+        to: "server",
+        videoSource: "camera"
+      )
+      
+      let mqttOffer = MqttWebRTCOffer(from: webRTCOffer)
+      let jsonData = try JSONEncoder().encode(mqttOffer)
+      let jsonString = String(data: jsonData, encoding: .utf8)!
+      
+      // Verify JSON contains clientId (not from/to)
+      #expect(jsonString.contains("\"clientId\":\"user123\""))
+      #expect(!jsonString.contains("\"from\""))
+      #expect(!jsonString.contains("\"to\""))
+      #expect(jsonString.contains("\"sdp\":\"test-sdp\""))
+      #expect(jsonString.contains("\"type\":\"offer\""))
+      #expect(jsonString.contains("\"videoSource\":\"camera\""))
+    }
+    
+    @Test("MQTT models round-trip JSON serialization")
+    func testMqttModelsRoundTripSerialization() async throws {
+      let originalOffer = MqttWebRTCOffer(
+        from: WebRTCOffer(
+          sdp: "test-sdp",
+          type: "offer", 
+          from: "client1",
+          to: "server",
+          videoSource: "camera"
+        )
+      )
+      
+      // Serialize to JSON
+      let jsonData = try JSONEncoder().encode(originalOffer)
+      
+      // Deserialize back
+      let decodedOffer = try JSONDecoder().decode(MqttWebRTCOffer.self, from: jsonData)
+      
+      #expect(decodedOffer == originalOffer)
+      #expect(decodedOffer.clientId == "client1")
+    }
+  }
 }
