@@ -8,7 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		4143EAAB2E574BA90063D0EA /* WebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = 4143EAAA2E574BA90063D0EA /* WebRTC */; };
-		4143EAAE2E5758510063D0EA /* WebRTCCore in Frameworks */ = {isa = PBXBuildFile; productRef = 4143EAAD2E5758510063D0EA /* WebRTCCore */; };
+		4195BA6A2E5D5EBB003A7422 /* WebRTCCore in Frameworks */ = {isa = PBXBuildFile; productRef = 4195BA692E5D5EBB003A7422 /* WebRTCCore */; };
 		41B494572E16BA3900890E09 /* ComposableArchitecture in Frameworks */ = {isa = PBXBuildFile; productRef = 41B494562E16BA3900890E09 /* ComposableArchitecture */; };
 		41CE97EF2E29FD0500C7FAAF /* MqttClientKit in Frameworks */ = {isa = PBXBuildFile; productRef = 41CE97EE2E29FD0500C7FAAF /* MqttClientKit */; };
 		41DECCD22E1E55D800C52C6F /* ForemanThemeCore in Frameworks */ = {isa = PBXBuildFile; productRef = 41DECCD12E1E55D800C52C6F /* ForemanThemeCore */; };
@@ -62,7 +62,7 @@
 			files = (
 				4143EAAB2E574BA90063D0EA /* WebRTC in Frameworks */,
 				41B494572E16BA3900890E09 /* ComposableArchitecture in Frameworks */,
-				4143EAAE2E5758510063D0EA /* WebRTCCore in Frameworks */,
+				4195BA6A2E5D5EBB003A7422 /* WebRTCCore in Frameworks */,
 				41DECCD22E1E55D800C52C6F /* ForemanThemeCore in Frameworks */,
 				41CE97EF2E29FD0500C7FAAF /* MqttClientKit in Frameworks */,
 			);
@@ -137,7 +137,7 @@
 				41DECCD12E1E55D800C52C6F /* ForemanThemeCore */,
 				41CE97EE2E29FD0500C7FAAF /* MqttClientKit */,
 				4143EAAA2E574BA90063D0EA /* WebRTC */,
-				4143EAAD2E5758510063D0EA /* WebRTCCore */,
+				4195BA692E5D5EBB003A7422 /* WebRTCCore */,
 			);
 			productName = foreman;
 			productReference = 41A1FB7A2E16AF3200A9EDA5 /* foreman.app */;
@@ -226,7 +226,7 @@
 				41B494502E16B10A00890E09 /* XCRemoteSwiftPackageReference "WebRTC" */,
 				41DECCD02E1E559100C52C6F /* XCLocalSwiftPackageReference "Packages/ForemanThemeCore" */,
 				41CE97ED2E29FCF200C7FAAF /* XCRemoteSwiftPackageReference "MqttClientKit" */,
-				4143EAAC2E5758420063D0EA /* XCLocalSwiftPackageReference "../WebRTCCore" */,
+				4195BA682E5D5E4F003A7422 /* XCRemoteSwiftPackageReference "WebRTCCore" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 41A1FB7B2E16AF3200A9EDA5 /* Products */;
@@ -630,10 +630,6 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		4143EAAC2E5758420063D0EA /* XCLocalSwiftPackageReference "../WebRTCCore" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = ../WebRTCCore;
-		};
 		41DECCD02E1E559100C52C6F /* XCLocalSwiftPackageReference "Packages/ForemanThemeCore" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/ForemanThemeCore;
@@ -641,6 +637,14 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		4195BA682E5D5E4F003A7422 /* XCRemoteSwiftPackageReference "WebRTCCore" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/Paintjed/WebRTCCore";
+			requirement = {
+				kind = exactVersion;
+				version = 1.0.0;
+			};
+		};
 		41B4944F2E16B07100890E09 /* XCRemoteSwiftPackageReference "swift-composable-architecture" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/pointfreeco/swift-composable-architecture";
@@ -673,9 +677,9 @@
 			package = 41B494502E16B10A00890E09 /* XCRemoteSwiftPackageReference "WebRTC" */;
 			productName = WebRTC;
 		};
-		4143EAAD2E5758510063D0EA /* WebRTCCore */ = {
+		4195BA692E5D5EBB003A7422 /* WebRTCCore */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 4143EAAC2E5758420063D0EA /* XCLocalSwiftPackageReference "../WebRTCCore" */;
+			package = 4195BA682E5D5E4F003A7422 /* XCRemoteSwiftPackageReference "WebRTCCore" */;
 			productName = WebRTCCore;
 		};
 		41B494562E16BA3900890E09 /* ComposableArchitecture */ = {
