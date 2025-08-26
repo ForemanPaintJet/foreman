@@ -13,6 +13,80 @@ import MqttClientKit
 import NIOCore
 import OSLog
 import SwiftUI
+import WebRTCCore
+
+// MARK: - Video Request Models
+
+struct RequestVideoMessage: Codable, Equatable {
+    var type: String = "requestVideo"
+    let clientId: String
+    let videoSource: String
+    // Optional: resolution, format, etc.
+    // let resolution: String?
+    // let format: String?
+}
+
+struct LeaveVideoMessage: Codable, Equatable {
+    var type: String = "leaveVideo"
+    let clientId: String
+    let videoSource: String
+}
+
+// MARK: - MQTT JSON Models (Legacy Format for Server Compatibility)
+
+/// MQTT-specific WebRTC Offer model that maintains clientId for server compatibility
+struct MqttWebRTCOffer: Codable, Equatable {
+    let sdp: String
+    let type: String
+    let clientId: String  // Legacy format for server compatibility
+    let videoSource: String
+    
+    init(from webRTCOffer: WebRTCOffer) {
+        self.sdp = webRTCOffer.sdp
+        self.type = webRTCOffer.type
+        self.clientId = webRTCOffer.from  // Convert from -> clientId for outgoing messages
+        self.videoSource = webRTCOffer.videoSource
+    }
+}
+
+/// MQTT-specific WebRTC Answer model that maintains clientId for server compatibility
+struct MqttWebRTCAnswer: Codable, Equatable {
+    let sdp: String
+    let type: String
+    let clientId: String  // Legacy format for server compatibility
+    let videoSource: String
+    
+    init(from webRTCAnswer: WebRTCAnswer) {
+        self.sdp = webRTCAnswer.sdp
+        self.type = webRTCAnswer.type
+        self.clientId = webRTCAnswer.from  // Convert from -> clientId for outgoing messages
+        self.videoSource = webRTCAnswer.videoSource
+    }
+}
+
+/// MQTT-specific ICE Candidate model that maintains clientId for server compatibility
+struct MqttICECandidate: Codable, Equatable {
+    struct Candidate: Codable, Equatable {
+        let candidate: String
+        let sdpMLineIndex: Int
+        let sdpMid: String?
+    }
+    
+    let type: String
+    let clientId: String  // Legacy format for server compatibility
+    let candidate: Candidate
+    
+    init(from iceCandidate: ICECandidate) {
+        self.type = iceCandidate.type
+        self.clientId = iceCandidate.from  // Convert from -> clientId for outgoing messages
+        self.candidate = Candidate(
+            candidate: iceCandidate.candidate.candidate,
+            sdpMLineIndex: iceCandidate.candidate.sdpMLineIndex,
+            sdpMid: iceCandidate.candidate.sdpMid
+        )
+    }
+}
+
 
 // MARK: - WebRTC MQTT Feature
 
@@ -27,15 +101,12 @@ struct WebRTCMqttFeature {
             case connecting
             case joiningRoom
             case leavingRoom
-            case sendingOffer
-            case sendingAnswer
-            case sendingIceCandidate
         }
 
         var loadingItems: Set<LoadingItem> = []
         var connectionStatus: MqttClientKit.State = .idle
         var mqttInfo: MqttClientKitInfo = .init(
-            address: "192.168.1.124", port: 1883, clientID: "")
+            address: "192.168.1.103", port: 1883, clientID: "")
 
         var userId: String = ""
         var connectedUsers: [String] = []
@@ -43,10 +114,13 @@ struct WebRTCMqttFeature {
         var messages: [MQTTPublishInfo] = []
         var isJoinedToRoom: Bool = false
 
-        // WebRTC specific state
+        // MQTT-specific WebRTC message handling
         var pendingOffers: [WebRTCOffer] = []
         var pendingAnswers: [WebRTCAnswer] = []
         var pendingIceCandidates: [ICECandidate] = []
+        
+        var directVideoCall: DirectVideoCallFeature.State = DirectVideoCallFeature.State()
+        var webRTCFeature: WebRTCFeature.State = WebRTCFeature.State()
 
         @Presents var alert: AlertState<Action.Alert>?
 
@@ -63,6 +137,8 @@ struct WebRTCMqttFeature {
         case _internal(InternalAction)
         case delegate(DelegateAction)
         case alert(PresentationAction<Alert>)
+        case directVideoCall(DirectVideoCallFeature.Action)
+        case webRTCFeature(WebRTCFeature.Action)
 
         @CasePathable
         enum ViewAction: Equatable {
@@ -72,15 +148,8 @@ struct WebRTCMqttFeature {
             case disconnect
             case joinRoom
             case leaveRoom
-            case sendOffer(to: String, sdp: String)
-            case sendAnswer(to: String, sdp: String)
-            case sendIceCandidate(
-                to: String, candidate: String, sdpMLineIndex: Int, sdpMid: String?)
             case clearMessages
             case clearError
-
-            // WebRTC Actions
-            case createOfferForUser(String)
         }
 
         @CasePathable
@@ -89,21 +158,17 @@ struct WebRTCMqttFeature {
             case connectionStatusChanged(MqttClientKit.State)
             case mqttMessageReceived(MQTTPublishInfo)
             case offerReceived(WebRTCOffer)
-            case answerReceived(WebRTCAnswer)
             case iceCandidateReceived(ICECandidate)
-            case roomUpdateReceived(RoomInfo)
             case errorOccurred(String)
             case mqttConnected
             case mqttDisconnected
             case roomJoined
             case roomLeft
 
-            // WebRTC Internal Actions
+            // WebRTC MQTT publishing actions
             case webRTCOfferGenerated(WebRTCOffer)
             case webRTCAnswerGenerated(WebRTCAnswer)
             case webRTCIceCandidateGenerated(ICECandidate)
-            case peerConnectionCreated(String)
-            case peerConnectionRemoved(String)
         }
 
         enum DelegateAction: Equatable {
@@ -134,6 +199,12 @@ struct WebRTCMqttFeature {
 
     var body: some ReducerOf<Self> {
         BindingReducer()
+        Scope(state: \.directVideoCall, action: \.directVideoCall) {
+            DirectVideoCallFeature()
+        }
+        Scope(state: \.webRTCFeature, action: \.webRTCFeature) {
+            WebRTCFeature()
+        }
         Reduce(core)
             .ifLet(\.$alert, action: \.alert)
     }
@@ -153,6 +224,15 @@ struct WebRTCMqttFeature {
             return handleInternalAction(into: &state, action: internalAction)
 
         case .delegate:
+            return .none
+            
+        case .directVideoCall:
+            return .none
+            
+        case .webRTCFeature(.delegate(let delegateAction)):
+            return handleWebRTCFeatureDelegate(into: &state, action: delegateAction)
+            
+        case .webRTCFeature:
             return .none
 
         case .alert(.presented(.confirmDisconnect)):
@@ -174,35 +254,14 @@ struct WebRTCMqttFeature {
         Action
     > {
         @Dependency(\.mqttClientKit) var mqttClientKit
-        @Dependency(\.webRTCClient) var webRTCClient
 
         switch action {
         case .task:
             logger.info(
-                "🟠 [WebRTCMqttFeature] task: Generating default userId and subscribing to streams")
+                "🟠 [WebRTCMqttFeature] task: Generating default userId and starting WebRTC feature")
             state.generateDefaultUserId()
-            return .run { send in
-                // Subscribe to MQTT streams
-                await withTaskGroup(of: Void.self) { group in
-                    // WebRTC streams
-                    group.addTask {
-                        for await offer in await webRTCClient.offerStream() {
-                            await send(._internal(.webRTCOfferGenerated(offer)))
-                        }
-                    }
-                    group.addTask {
-                        for await answer in await webRTCClient.answerStream() {
-                            await send(._internal(.webRTCAnswerGenerated(answer)))
-                        }
-                    }
-                    group.addTask {
-                        for await candidate in await webRTCClient.iceCandidateStream() {
-                            await send(._internal(.webRTCIceCandidateGenerated(candidate)))
-                        }
-                    }
-                }
-            }
-            .cancellable(id: CancelID.stream)
+            // Start the WebRTCFeature which will handle WebRTC events through its delegate
+            return .send(.webRTCFeature(.view(.task)))
 
         case .teardown:
             return .cancel(id: CancelID.stream)
@@ -272,12 +331,14 @@ struct WebRTCMqttFeature {
 
         case .leaveRoom:
             //                logger.info("🟠 [MQTT] Leaving room: \(state.roomId)")
+            let userId = state.userId
+            
             guard state.isJoinedToRoom else { return .none }
             return .run { send in
                 await send(._internal(.setLoading(.leavingRoom, true)))
                 do {
                     try await mqttClientKit.unsubscribe(outputTopic)
-                    let msg = LeaveVideoMessage(clientId: "123", videoSource: "")
+                    let msg = LeaveVideoMessage(clientId: userId, videoSource: "")
                     let payload = try JSONEncoder().encode(msg)
                     let requestInfo = MQTTPublishInfo(
                         qos: .exactlyOnce, retain: false, topicName: inputTopic,
@@ -292,64 +353,6 @@ struct WebRTCMqttFeature {
                 await send(._internal(.setLoading(.leavingRoom, false)))
             }
 
-        case .sendOffer(let to, let sdp):
-            logger.info("🟠 [WebRTC] Sending offer to: \(to), sdp length: \(sdp.count)")
-            // Publish offer to MQTT topic
-            let offer = WebRTCOffer(
-                sdp: sdp, type: "offer", clientId: state.userId, videoSource: "")
-            return .run { send in
-                await send(._internal(.setLoading(.sendingOffer, true)))
-                do {
-                    let payload = try JSONEncoder().encode(offer)
-                    let info = MQTTPublishInfo(
-                        qos: .atLeastOnce, retain: false, topicName: inputTopic,
-                        payload: ByteBuffer(data: payload), properties: .init([]))
-                    try await mqttClientKit.publish(info)
-                } catch {
-                    await send(._internal(.errorOccurred(error.localizedDescription)))
-                }
-                await send(._internal(.setLoading(.sendingOffer, false)))
-            }
-
-        case .sendAnswer(let to, let sdp):
-            logger.info("🟠 [WebRTC] Sending answer to: \(to), sdp length: \(sdp.count)")
-            let answer = WebRTCAnswer(
-                sdp: sdp, type: "answer", clientId: state.userId, videoSource: "")
-            return .run { send in
-                await send(._internal(.setLoading(.sendingAnswer, true)))
-                do {
-                    let payload = try JSONEncoder().encode(answer)
-                    let info = MQTTPublishInfo(
-                        qos: .atLeastOnce, retain: false, topicName: inputTopic,
-                        payload: ByteBuffer(data: payload), properties: .init([]))
-                    try await mqttClientKit.publish(info)
-                } catch {
-                    await send(._internal(.errorOccurred(error.localizedDescription)))
-                }
-                await send(._internal(.setLoading(.sendingAnswer, false)))
-            }
-
-        case .sendIceCandidate(let to, let candidate, let sdpMLineIndex, let sdpMid):
-            logger.info(
-                "🟠 [WebRTC] Sending ICE candidate to: \(to), candidate: \(candidate.prefix(20))..."
-            )
-            let iceCandidate = ICECandidate(
-                type: "ice", clientId: state.userId,
-                candidate: .init(candidate: candidate, sdpMLineIndex: sdpMLineIndex, sdpMid: sdpMid)
-            )
-            return .run { send in
-                await send(._internal(.setLoading(.sendingIceCandidate, true)))
-                do {
-                    let payload = try JSONEncoder().encode(iceCandidate)
-                    let info = MQTTPublishInfo(
-                        qos: .atLeastOnce, retain: false, topicName: inputTopic,
-                        payload: ByteBuffer(data: payload), properties: .init([]))
-                    try await mqttClientKit.publish(info)
-                } catch {
-                    await send(._internal(.errorOccurred(error.localizedDescription)))
-                }
-                await send(._internal(.setLoading(.sendingIceCandidate, false)))
-            }
 
         case .clearMessages:
             state.messages = []
@@ -358,22 +361,6 @@ struct WebRTCMqttFeature {
         case .clearError:
             state.lastError = nil
             return .none
-
-        case .createOfferForUser(let userId):
-            return .run { send in
-                do {
-                    let created = await webRTCClient.createPeerConnection(userId)
-                    if created {
-                        await send(._internal(.peerConnectionCreated(userId)))
-                    }
-                    try await webRTCClient.createOffer(userId)
-                } catch {
-                    await send(
-                        ._internal(
-                            .errorOccurred(
-                                "Failed to create offer: \(error.localizedDescription)")))
-                }
-            }
         }
     }
 
@@ -381,7 +368,6 @@ struct WebRTCMqttFeature {
         -> Effect<Action>
     {
         @Dependency(\.mqttClientKit) var mqttClientKit
-        @Dependency(\.webRTCClient) var webRTCClient
 
         switch action {
         case .setLoading(let item, let isLoading):
@@ -416,24 +402,13 @@ struct WebRTCMqttFeature {
                         case "offer":
                             if let sdp = json["sdp"] as? String {
                                 let offer = WebRTCOffer(
-                                    sdp: sdp, type: type, clientId: clientId, videoSource: "")
+                                    sdp: sdp, type: type, from: clientId, to: state.userId, videoSource: "")
                                 logger.info("🟠 [MQTT] Parsed offer message")
-                                if clientId == "self" {
-                                    logger.info("Ignore \(clientId) message.")
+                                if clientId == state.userId {
+                                    logger.info("Ignore message from self.")
                                     return .none
                                 }
                                 return .send(._internal(.offerReceived(offer)))
-                            }
-                        case "answer":
-                            if let sdp = json["sdp"] as? String {
-                                let answer = WebRTCAnswer(
-                                    sdp: sdp, type: type, clientId: clientId, videoSource: "")
-                                logger.info("🟠 [MQTT] Parsed answer message")
-                                if clientId == "self" {
-                                    logger.info("Ignore \(clientId) message.")
-                                    return .none
-                                }
-                                return .send(._internal(.answerReceived(answer)))
                             }
                         case "ice":
                             if let candidateObj = json["candidate"] as? [String: Any],
@@ -442,13 +417,13 @@ struct WebRTCMqttFeature {
                             {
                                 let sdpMid: String? = candidateObj["sdpMid"] as? String
                                 let ice = ICECandidate(
-                                    type: type, clientId: clientId,
+                                    type: type, from: clientId, to: state.userId,
                                     candidate: .init(
                                         candidate: candidate, sdpMLineIndex: sdpMLineIndex,
                                         sdpMid: sdpMid))
                                 logger.info("🟠 [MQTT] Parsed ICE message")
-                                if clientId == "self" {
-                                    logger.info("Ignore \(clientId) message.")
+                                if clientId == state.userId {
+                                    logger.info("Ignore message from self.")
                                     return .none
                                 }
                                 return .send(._internal(.iceCandidateReceived(ice)))
@@ -479,59 +454,28 @@ struct WebRTCMqttFeature {
 
         case .offerReceived(let offer):
             logger.info(
-                "🟠 [WebRTC] Offer received: from=\(offer.clientId), sdp length=\(offer.sdp.count)"
+                "🟠 [WebRTC] Offer received: from=\(offer.from), sdp length=\(offer.sdp.count)"
             )
             state.pendingOffers.append(offer)
-            return .run { send in
-                do {
-                    try await webRTCClient.handleRemoteOffer(offer)
-                } catch {
-                    await send(
-                        ._internal(
-                            .errorOccurred(
-                                "Failed to handle remote offer: \(error.localizedDescription)"))
-                    )
-                }
-            }
+            // Pass the offer directly to WebRTCFeature as it already has proper from/to format
+            return .send(.webRTCFeature(.view(.handleRemoteOffer(offer))))
 
-        case .answerReceived(let answer):
-            logger.info(
-                "🟠 [WebRTC] Answer received: from=\(answer.clientId), sdp length=\(answer.sdp.count)"
-            )
-            state.pendingAnswers.append(answer)
-            return .run { send in
-                do {
-                    try await webRTCClient.handleRemoteAnswer(answer)
-                } catch {
-                    await send(
-                        ._internal(
-                            .errorOccurred(
-                                "Failed to handle remote answer: \(error.localizedDescription)")
-                        ))
-                }
-            }
+//        case .answerReceived(let answer):
+//            logger.info(
+//                "🟠 [WebRTC] Answer received: from=\(answer.clientId), sdp length=\(answer.sdp.count)"
+//            )
+//            state.pendingAnswers.append(answer)
+//            // Use WebRTCCore models - directly pass the answer to WebRTCFeature
+//            return .send(.webRTCFeature(.view(.handleRemoteOffer(<#T##WebRTCOffer#>, userId: <#T##String#>))))
+//            return .send(.webRTCFeature(.view(.handleRemoteAnswer(answer, userId: answer.clientId))))
 
         case .iceCandidateReceived(let candidate):
             logger.info(
-                "🟠 [WebRTC] ICE candidate received: from=\(candidate.clientId), candidate=\(candidate.candidate.candidate.prefix(20))..."
+                "🟠 [WebRTC] ICE candidate received: from=\(candidate.from), candidate=\(candidate.candidate.candidate.prefix(20))..."
             )
             state.pendingIceCandidates.append(candidate)
-            return .run { send in
-                do {
-                    try await webRTCClient.handleRemoteIceCandidate(candidate)
-                } catch {
-                    await send(
-                        ._internal(
-                            .errorOccurred(
-                                "Failed to handle remote ICE candidate: \(error.localizedDescription)"
-                            )))
-                }
-            }
-
-        case .roomUpdateReceived(let roomInfo):
-            logger.info("🟠 [MQTT] Room update received: users=\(roomInfo.users)")
-            state.connectedUsers = roomInfo.users
-            return .none
+            // Pass the candidate directly to WebRTCFeature as it already has proper from/to format
+            return .send(.webRTCFeature(.view(.handleICECandidate(candidate))))
 
         case .errorOccurred(let error):
             logger.error("🔴 [WebRTCMqttFeature] Error occurred: \(error)")
@@ -567,20 +511,21 @@ struct WebRTCMqttFeature {
         case .roomLeft:
             logger.info("🟠 [MQTT] Room left")
             state.isJoinedToRoom = false
-            let connectedUsers = state.connectedUsers
             state.connectedUsers = []
-            return .run { send in
-                for userId in connectedUsers {
-                    await webRTCClient.removePeerConnection(userId)
-                    await send(._internal(.peerConnectionRemoved(userId)))
-                }
-            }
+            // Use WebRTCFeature to remove all peer connections
+            let connectedPeers = state.webRTCFeature.connectedPeers
+//            let effects = connectedPeers.map { peer in
+//                Effect<Action>.send(.webRTCFeature(.view(.removePeerConnection(userId: peer.id))))
+//            }
+            return .none
 
         // WebRTC Internal Actions
         case .webRTCOfferGenerated(let offer):
             return .run { send in
                 do {
-                    let payload = try JSONEncoder().encode(offer)
+                    // Convert to MQTT-compatible format with clientId
+                    let mqttOffer = MqttWebRTCOffer(from: offer)
+                    let payload = try JSONEncoder().encode(mqttOffer)
                     let info = MQTTPublishInfo(
                         qos: .atLeastOnce, retain: false, topicName: inputTopic,
                         payload: ByteBuffer(data: payload), properties: .init([]))
@@ -596,7 +541,9 @@ struct WebRTCMqttFeature {
         case .webRTCAnswerGenerated(let answer):
             return .run { send in
                 do {
-                    let payload = try JSONEncoder().encode(answer)
+                    // Convert to MQTT-compatible format with clientId
+                    let mqttAnswer = MqttWebRTCAnswer(from: answer)
+                    let payload = try JSONEncoder().encode(mqttAnswer)
                     let info = MQTTPublishInfo(
                         qos: .atLeastOnce, retain: false, topicName: inputTopic,
                         payload: ByteBuffer(data: payload), properties: .init([]))
@@ -612,7 +559,9 @@ struct WebRTCMqttFeature {
         case .webRTCIceCandidateGenerated(let candidate):
             return .run { send in
                 do {
-                    let payload = try JSONEncoder().encode(candidate)
+                    // Convert to MQTT-compatible format with clientId
+                    let mqttCandidate = MqttICECandidate(from: candidate)
+                    let payload = try JSONEncoder().encode(mqttCandidate)
                     let info = MQTTPublishInfo(
                         qos: .atLeastOnce, retain: false, topicName: inputTopic,
                         payload: ByteBuffer(data: payload), properties: .init([]))
@@ -625,22 +574,59 @@ struct WebRTCMqttFeature {
                 }
             }
 
-        case .peerConnectionCreated(let userId):
-            return .none
-
-        case .peerConnectionRemoved(let userId):
-            return .none
         }
     }
 
     // MARK: - Helper Functions
+    
+    private func handleWebRTCFeatureDelegate(into state: inout State, action: WebRTCFeature.Delegate) -> Effect<Action> {
+        switch action {
+        case let .offerGenerated(sdp, userId):
+            let offer = WebRTCOffer(sdp: sdp, type: "offer", from: state.userId, to: userId, videoSource: "")
+            return .send(._internal(.webRTCOfferGenerated(offer)))
+            
+        case let .answerGenerated(sdp, userId):
+            let answer = WebRTCAnswer(sdp: sdp, type: "answer", from: state.userId, to: userId, videoSource: "")
+            return .send(._internal(.webRTCAnswerGenerated(answer)))
+            
+        case let .iceCandidateGenerated(candidate, sdpMLineIndex, sdpMid, userId):
+            let iceCandidate = ICECandidate(
+                type: "ice",
+                from: state.userId,
+                to: userId,
+                candidate: .init(
+                    candidate: candidate,
+                    sdpMLineIndex: sdpMLineIndex,
+                    sdpMid: sdpMid
+                )
+            )
+            return .send(._internal(.webRTCIceCandidateGenerated(iceCandidate)))
+            
+        case let .videoTrackAdded(trackInfo):
+            // Update DirectVideoCall feature with video track info
+            state.directVideoCall.remoteVideoTracks.append(trackInfo)
+            return .none
+            
+        case let .videoTrackRemoved(userId):
+            // Update DirectVideoCall feature after video track removal
+            state.directVideoCall.remoteVideoTracks = state.webRTCFeature.connectedPeers.compactMap { $0.videoTrack }
+            return .none
+            
+        case let .connectionStateChanged(userId, connectionState):
+            // Update DirectVideoCall feature with connection state changes
+//            state.directVideoCall.remoteVideoTracks = state.webRTCFeature.connectedPeers.compactMap { $0.videoTrack }
+            return .none
+            
+        case let .errorOccurred(error, userId):
+            return .send(._internal(.errorOccurred("WebRTC Error: \(error.localizedDescription)")))
+        }
+    }
+    
 
     private func executeDisconnect(state: inout State) -> Effect<Action> {
-        let connectedUsers = state.connectedUsers
         let isJoinedToRoom = state.isJoinedToRoom
 
         @Dependency(\.mqttClientKit) var mqttClientKit
-        @Dependency(\.webRTCClient) var webRTCClient
 
         return .run { send in
             do {
@@ -650,10 +636,6 @@ struct WebRTCMqttFeature {
                     await send(._internal(.roomLeft))
                     await send(.delegate(.didLeaveRoom))
                     await send(._internal(.setLoading(.leavingRoom, false)))
-                    for userId in connectedUsers {
-                        await webRTCClient.removePeerConnection(userId)
-                        await send(._internal(.peerConnectionRemoved(userId)))
-                    }
                 }
                 try await mqttClientKit.disconnect()
                 await send(._internal(.mqttDisconnected))

@@ -9,6 +9,7 @@ import Charts
 import ComposableArchitecture
 import OSLog
 import SwiftUI
+import WebRTCCore
 
 @Reducer
 struct DirectVideoCallFeature {
@@ -26,6 +27,9 @@ struct DirectVideoCallFeature {
 
         // Alert system
         var currentAlert: AlertType = .none
+        
+        // WebRTC state
+        var remoteVideoTracks: [VideoTrackInfo] = []
 
         enum AlertType: String, CaseIterable, Equatable {
             case none = "None"
@@ -99,9 +103,10 @@ struct DirectVideoCallFeature {
             return .none
         case .view(.task):
             // Start battery monitoring
-            return .publisher {
-                batteryClient.batteryLevelPublisher()
-                    .map { ._internal(.batteryLevelChanged($0)) }
+            return .run { send in
+                for await batteryLevel in batteryClient.batteryLevelPublisher().values {
+                    await send(._internal(.batteryLevelChanged(batteryLevel)))
+                }
             }
             .cancellable(id: CancelID.battery)
         case .view(.showConfig(let show)):
@@ -132,6 +137,7 @@ struct DirectVideoCallFeature {
             return .none
         }
     }
+    
 }
 
 @ViewAction(for: DirectVideoCallFeature.self)
@@ -139,7 +145,6 @@ struct DirectVideoCallView: View {
     @Bindable var store: StoreOf<DirectVideoCallFeature>
     private let logger = Logger(subsystem: "foreman", category: "DirectVideoCallView")
 
-    @Dependency(\.webRTCClient) var webRTCClientDependency
 
     var body: some View {
         VStack(spacing: 0) {
@@ -157,7 +162,7 @@ struct DirectVideoCallView: View {
 
             ZStack {
                 // Main content area
-                VideoCallView(webRTCClient: WebRTCClientLive.shared.getClient())
+                VideoCallView(remoteVideoTracks: store.remoteVideoTracks)
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                     .padding(.all, store.currentAlert == .none ? 0 : 20)
                     .background(
@@ -217,15 +222,7 @@ struct DirectVideoCallView: View {
         .task {
             send(.task)
             logger.info("🎥 DirectVideoCallView: Video viewer started with WebRTC client")
-            let client = WebRTCClientLive.shared.getClient()
-            logger.info(
-                "🎥 DirectVideoCallView: Current video tracks count: \(client.remoteVideoTracks.count)"
-            )
-            for (index, track) in client.remoteVideoTracks.enumerated() {
-                logger.info(
-                    "🎥 Track \(index): User \(track.userId), Enabled: \(track.track?.isEnabled ?? false)"
-                )
-            }
+            logger.info("🎥 DirectVideoCallView: Video viewer started")
         }
     }
 
