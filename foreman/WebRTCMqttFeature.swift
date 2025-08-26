@@ -331,12 +331,14 @@ struct WebRTCMqttFeature {
 
         case .leaveRoom:
             //                logger.info("🟠 [MQTT] Leaving room: \(state.roomId)")
+            let userId = state.userId
+            
             guard state.isJoinedToRoom else { return .none }
             return .run { send in
                 await send(._internal(.setLoading(.leavingRoom, true)))
                 do {
                     try await mqttClientKit.unsubscribe(outputTopic)
-                    let msg = LeaveVideoMessage(clientId: state.userId, videoSource: "")
+                    let msg = LeaveVideoMessage(clientId: userId, videoSource: "")
                     let payload = try JSONEncoder().encode(msg)
                     let requestInfo = MQTTPublishInfo(
                         qos: .exactlyOnce, retain: false, topicName: inputTopic,
