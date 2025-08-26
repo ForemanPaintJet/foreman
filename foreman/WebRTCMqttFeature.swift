@@ -158,7 +158,6 @@ struct WebRTCMqttFeature {
             case connectionStatusChanged(MqttClientKit.State)
             case mqttMessageReceived(MQTTPublishInfo)
             case offerReceived(WebRTCOffer)
-//            case answerReceived(WebRTCAnswer)
             case iceCandidateReceived(ICECandidate)
             case errorOccurred(String)
             case mqttConnected
@@ -337,7 +336,7 @@ struct WebRTCMqttFeature {
                 await send(._internal(.setLoading(.leavingRoom, true)))
                 do {
                     try await mqttClientKit.unsubscribe(outputTopic)
-                    let msg = LeaveVideoMessage(clientId: "123", videoSource: "")
+                    let msg = LeaveVideoMessage(clientId: state.userId, videoSource: "")
                     let payload = try JSONEncoder().encode(msg)
                     let requestInfo = MQTTPublishInfo(
                         qos: .exactlyOnce, retain: false, topicName: inputTopic,
@@ -409,17 +408,6 @@ struct WebRTCMqttFeature {
                                 }
                                 return .send(._internal(.offerReceived(offer)))
                             }
-//                        case "answer":
-//                            if let sdp = json["sdp"] as? String {
-//                                let answer = WebRTCAnswer(
-//                                    sdp: sdp, type: type, clientId: clientId, videoSource: "")
-//                                logger.info("🟠 [MQTT] Parsed answer message")
-//                                if clientId == "self" {
-//                                    logger.info("Ignore \(clientId) message.")
-//                                    return .none
-//                                }
-//                                return .send(._internal(.answerReceived(answer)))
-//                            }
                         case "ice":
                             if let candidateObj = json["candidate"] as? [String: Any],
                                 let candidate = candidateObj["candidate"] as? String,
