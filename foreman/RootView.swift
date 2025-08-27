@@ -17,11 +17,7 @@ struct RootView: View {
   }
   
   var body: some View {
-    ZStack {
-      Rectangle()
-        .fill(.orange.gradient)
-        .ignoresSafeArea()
-      
+    ZStack {      
       // WebRTC View
       if let webRTCStore = store.scope(state: \.webRTCMqtt, action: \.webRTCMqtt) {
         WebRTCMqttView(

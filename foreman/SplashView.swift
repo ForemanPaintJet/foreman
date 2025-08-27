@@ -20,9 +20,8 @@ struct SplashView: View {
     ZStack {
       // 背景
       Rectangle()
-        .fill(.orange.gradient)
+        .fill(.splashBackground.gradient)
         .ignoresSafeArea()
-        .opacity(1)
       
       VStack(spacing: 40) {
         // App Logo/Icon
