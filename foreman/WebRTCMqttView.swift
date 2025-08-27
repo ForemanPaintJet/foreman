@@ -12,14 +12,17 @@ import SwiftUI
 @ViewAction(for: WebRTCMqttFeature.self)
 struct WebRTCMqttView: View {
     @Bindable var store: StoreOf<WebRTCMqttFeature>
+    let namespace: Namespace.ID?
 
     private let logger = Logger(subsystem: "foreman", category: "WebRTCMqttView")
+    
+    init(store: StoreOf<WebRTCMqttFeature>, namespace: Namespace.ID? = nil) {
+        self.store = store
+        self.namespace = namespace
+    }
 
     var body: some View {
         ZStack {
-            Rectangle()
-                .fill(.orange.gradient)
-                .ignoresSafeArea()
             Group {
                 if store.isJoinedToRoom {
                     DirectVideoCallView(
@@ -29,7 +32,23 @@ struct WebRTCMqttView: View {
                     VStack {
                         Spacer()
                         VStack(spacing: 20) {
-                            // MQTT Connection Section
+                            // Video Icon Header
+                            HStack {
+                                if let namespace = namespace {
+                                    Text("FOREMAN TECH")
+                                        .font(.title)
+                                        .fontWeight(.bold)
+                                        .foregroundColor(.white)
+                                        .matchedGeometryEffect(id: "titleText", in: namespace)
+                                    Image("logo")
+                                        .scaleEffect(1) // 保持 1:1 大小
+                                        .rotationEffect(.degrees(store.logoRotationAngle))
+                                        .matchedGeometryEffect(id: "videoIcon", in: namespace)
+                                }
+                            }
+                            .padding(.bottom, 8)
+                            
+                            // MQTT Connection Section - 延遲顯示
                             VStack(alignment: .leading, spacing: 12) {
                                 Text("MQTT Broker")
                                     .font(.headline)
@@ -76,7 +95,6 @@ struct WebRTCMqttView: View {
                         .frame(maxWidth: 400)
                         Spacer()
                     }
-                    .navigationTitle("WebRTC MQTT")
                     .padding()
                 }
             }
@@ -90,10 +108,13 @@ struct WebRTCMqttView: View {
 }
 
 #Preview {
-    WebRTCMqttView(
+    @Namespace var namespace
+    return WebRTCMqttView(
         store: .init(
             initialState: WebRTCMqttFeature.State(),
             reducer: {
                 WebRTCMqttFeature()
-            }))
+            }),
+        namespace: namespace
+    )
 }

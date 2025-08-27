@@ -37,9 +37,22 @@
 		41A1FB922E16AF3500A9EDA5 /* foremanUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = foremanUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		418408D22E5EE70700AAABD6 /* Exceptions for "foreman" folder in "foreman" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 41A1FB792E16AF3200A9EDA5 /* foreman */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		4158982F2E1E8FD900B01E9D /* foreman */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				418408D22E5EE70700AAABD6 /* Exceptions for "foreman" folder in "foreman" target */,
+			);
 			path = foreman;
 			sourceTree = "<group>";
 		};
@@ -430,6 +443,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = foreman/Info.plist;
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "For webrtc";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
@@ -470,6 +484,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = foreman/Info.plist;
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "For webrtc";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
