@@ -11,7 +11,6 @@ import OSLog
 
 @Reducer
 struct SplashFeature {
-  @Dependency(\.continuousClock) var clock
   @ObservableState
   struct State: Equatable {
     var logoRotationAngle: Double = 90.0
@@ -44,9 +43,14 @@ struct SplashFeature {
   func core(into state: inout State, action: Action) -> Effect<Action> {
     switch action {
     case .view(.task):
-      return .run { [clock = self.clock] send in
-        try await clock.sleep(for: .seconds(1)) // 顯示 1 秒
-        await send(.delegate(.splashCompleted), animation: .easeInOut(duration: 0.5))
+      return .run { send in
+        @Dependency(\.continuousClock) var clock
+        do {
+          try await clock.sleep(for: .seconds(1)) // Display for 1 second
+          await send(.delegate(.splashCompleted), animation: .easeInOut(duration: 0.5))
+        } catch {
+          // Handle cancellation gracefully - no action needed as effect is being cancelled
+        }
       }
       .cancellable(id: CancelID.timer)
       
