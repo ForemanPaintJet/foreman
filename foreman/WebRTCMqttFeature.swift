@@ -121,6 +121,7 @@ struct WebRTCMqttFeature {
         
         var directVideoCall: DirectVideoCallFeature.State = DirectVideoCallFeature.State()
         var webRTCFeature: WebRTCFeature.State = WebRTCFeature.State()
+        var logoRotationAngle: Double = 90.0
 
         @Presents var alert: AlertState<Action.Alert>?
 
@@ -150,6 +151,7 @@ struct WebRTCMqttFeature {
             case leaveRoom
             case clearMessages
             case clearError
+            case resetLogoRotation
         }
 
         @CasePathable
@@ -164,6 +166,7 @@ struct WebRTCMqttFeature {
             case mqttDisconnected
             case roomJoined
             case roomLeft
+            case setLogoRotation(Double)
 
             // WebRTC MQTT publishing actions
             case webRTCOfferGenerated(WebRTCOffer)
@@ -254,7 +257,7 @@ struct WebRTCMqttFeature {
         Action
     > {
         @Dependency(\.mqttClientKit) var mqttClientKit
-
+        
         switch action {
         case .task:
             logger.info(
@@ -262,10 +265,10 @@ struct WebRTCMqttFeature {
             state.generateDefaultUserId()
             // Start the WebRTCFeature which will handle WebRTC events through its delegate
             return .send(.webRTCFeature(.view(.task)))
-
+            
         case .teardown:
             return .cancel(id: CancelID.stream)
-
+            
         case .connectToBroker:
             guard
                 !state.mqttInfo.address.isEmpty,
@@ -276,25 +279,25 @@ struct WebRTCMqttFeature {
                         .errorOccurred("MQTT address, Room ID, and User ID are required")))
             }
             let info = state.mqttInfo
-
+            
             logger.info(
                 "🟠 [MQTT] Connecting to broker: address=\(info.address), port=\(info.port), clientID=\(info.clientID)"
             )
-
+            
             return .run { send in
                 await send(._internal(.setLoading(.connecting, true)))
                 let stream = await mqttClientKit.connect(info)
                 await send(._internal(.mqttConnected))
                 await send(.delegate(.didConnect))
-
+                
                 for await status in stream {
                     await send(._internal(.connectionStatusChanged(status)))
                 }
-
+                
             }.cancellable(id: CancelID.state)
         case .disconnect:
             return executeDisconnect(state: &state)
-
+            
         case .joinRoom:
             guard !state.userId.isEmpty else {
                 return .send(._internal(.errorOccurred("Room ID and User ID are required")))
@@ -304,7 +307,7 @@ struct WebRTCMqttFeature {
             }
             let userId = state.userId
             logger.info("🟠 [MQTT] userId=\(userId)")
-
+            
             // Implement room join logic via MQTT topic subscription
             return .run { send in
                 await send(._internal(.setLoading(.joiningRoom, true)))
@@ -312,15 +315,15 @@ struct WebRTCMqttFeature {
                     let subInfo = MQTTSubscribeInfo(
                         topicFilter: outputTopic, qos: .atLeastOnce)
                     _ = try await mqttClientKit.subscribe(subInfo)
-
+                    
                     let msg = RequestVideoMessage(clientId: userId, videoSource: "")
                     let payload = try JSONEncoder().encode(msg)
                     let requestInfo = MQTTPublishInfo(
                         qos: .exactlyOnce, retain: false, topicName: inputTopic,
                         payload: ByteBuffer(data: payload), properties: [])
-
+                    
                     try await mqttClientKit.publish(requestInfo)
-
+                    
                     await send(._internal(.roomJoined))
                     await send(.delegate(.didJoinRoom("")))
                 } catch {
@@ -328,7 +331,7 @@ struct WebRTCMqttFeature {
                 }
                 await send(._internal(.setLoading(.joiningRoom, false)))
             }
-
+            
         case .leaveRoom:
             //                logger.info("🟠 [MQTT] Leaving room: \(state.roomId)")
             let userId = state.userId
@@ -344,7 +347,7 @@ struct WebRTCMqttFeature {
                         qos: .exactlyOnce, retain: false, topicName: inputTopic,
                         payload: ByteBuffer(data: payload), properties: [])
                     try await mqttClientKit.publish(requestInfo)
-
+                    
                     await send(._internal(.roomLeft))
                     await send(.delegate(.didLeaveRoom))
                 } catch {
@@ -352,15 +355,20 @@ struct WebRTCMqttFeature {
                 }
                 await send(._internal(.setLoading(.leavingRoom, false)))
             }
-
-
+            
+            
         case .clearMessages:
             state.messages = []
             return .none
-
+            
         case .clearError:
             state.lastError = nil
             return .none
+            
+        case .resetLogoRotation:
+            return .run { send in
+                await send(._internal(.setLogoRotation(0)), animation: .bouncy(duration: 1.0))
+            }
         }
     }
 
@@ -573,6 +581,10 @@ struct WebRTCMqttFeature {
                                 "Failed to send ICE candidate: \(error.localizedDescription)")))
                 }
             }
+            
+        case .setLogoRotation(let angle):
+            state.logoRotationAngle = angle
+            return .none
 
         }
     }

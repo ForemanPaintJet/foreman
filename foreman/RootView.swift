@@ -26,19 +26,19 @@ struct RootView: View {
       if let webRTCStore = store.scope(state: \.webRTCMqtt, action: \.webRTCMqtt) {
         WebRTCMqttView(
           store: webRTCStore,
-          namespace: videoIconNamespace,
-          isTransitioning: store.splash?.isTransitioning ?? false
-        )
+          namespace: videoIconNamespace
+        ).transition(.slide)
       }
       
       // Splash View 
       if let splashStore = store.scope(state: \.splash, action: \.splash) {
         SplashView(
           store: splashStore,
-          namespace: videoIconNamespace,
-          isTransitioning: splashStore.isTransitioning
+          namespace: videoIconNamespace
         )
       }
+    }.task {
+        store.send(.task)
     }
   }
 }

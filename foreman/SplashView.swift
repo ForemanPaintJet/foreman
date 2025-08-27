@@ -13,7 +13,6 @@ import SwiftUI
 struct SplashView: View {
   @Bindable var store: StoreOf<SplashFeature>
   let namespace: Namespace.ID
-  let isTransitioning: Bool
   
   private let logger = Logger(subsystem: "foreman", category: "SplashView")
   
@@ -23,15 +22,14 @@ struct SplashView: View {
       Rectangle()
         .fill(.orange.gradient)
         .ignoresSafeArea()
-        .opacity(isTransitioning ? 0 : 1)
+        .opacity(1)
       
       VStack(spacing: 40) {
         // App Logo/Icon
         Image("logo")
           .renderingMode(.template)
           .foregroundColor(.white)
-          .scaleEffect(isTransitioning ? 1 : store.scaleAmount * 1.2) // 調整最終大小
-          .rotationEffect(.degrees(90)) // 固定 90 度
+          .rotationEffect(.degrees(store.logoRotationAngle))
           .matchedGeometryEffect(id: "videoIcon", in: namespace)
         
         // App Title
@@ -39,7 +37,6 @@ struct SplashView: View {
           .font(.title)
           .fontWeight(.bold)
           .foregroundColor(.white)
-          .opacity(isTransitioning ? 0 : store.animationProgress)
           .matchedGeometryEffect(id: "titleText", in: namespace)
       }
       .padding()
@@ -59,7 +56,6 @@ struct SplashView: View {
       reducer: {
         SplashFeature()
       }),
-    namespace: namespace,
-    isTransitioning: false
+    namespace: namespace
   )
 }

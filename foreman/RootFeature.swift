@@ -10,19 +10,16 @@ import OSLog
 
 @Reducer
 struct RootFeature {
-  @Dependency(\.continuousClock) var clock
   @ObservableState
   struct State: Equatable {
     var splash: SplashFeature.State?
     var webRTCMqtt: WebRTCMqttFeature.State?
-    
-    init() {
-      self.splash = SplashFeature.State()
-    }
+    var logoRotationAngle: Double = 180.0
   }
   
   @CasePathable
   enum Action: Equatable {
+    case task
     case splash(SplashFeature.Action)
     case webRTCMqtt(WebRTCMqttFeature.Action)
     case transitionCompleted
@@ -44,18 +41,21 @@ struct RootFeature {
   
   func core(into state: inout State, action: Action) -> Effect<Action> {
     switch action {
+    case .task:
+        state.splash = SplashFeature.State(logoRotationAngle: state.logoRotationAngle)
+        return .none
     case .splash(.delegate(.splashCompleted)):
-      // 立即創建 WebRTC view
-      state.webRTCMqtt = WebRTCMqttFeature.State()
-      return .run { [clock = self.clock] send in
-        try await clock.sleep(for: .seconds(1)) // 1秒的過渡時間
-          await send(.transitionCompleted, animation: .default)
+        state.webRTCMqtt = WebRTCMqttFeature.State(logoRotationAngle: state.logoRotationAngle)
+      return .run { send in
+          await send(.transitionCompleted, animation: .easeInOut(duration: 1.0))
       }
       .cancellable(id: CancelID.transition)
       
     case .transitionCompleted:
       state.splash = nil
-      return .none
+      return .run { send in
+        await send(.webRTCMqtt(.view(.resetLogoRotation)), animation: .bouncy)
+      }
       
     case .splash:
       return .none
