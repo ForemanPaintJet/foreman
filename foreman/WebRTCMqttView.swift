@@ -23,9 +23,6 @@ struct WebRTCMqttView: View {
 
     var body: some View {
         ZStack {
-            Rectangle()
-                .fill(.splashBackground.gradient)
-                .ignoresSafeArea()
             Group {
                 if store.isJoinedToRoom {
                     DirectVideoCallView(

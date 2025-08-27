@@ -17,12 +17,7 @@ struct SplashView: View {
   private let logger = Logger(subsystem: "foreman", category: "SplashView")
   
   var body: some View {
-    ZStack {
-      // 背景
-      Rectangle()
-        .fill(.splashBackground.gradient)
-        .ignoresSafeArea()
-      
+    ZStack {      
       VStack(spacing: 40) {
         // App Logo/Icon
         Image("logo")
