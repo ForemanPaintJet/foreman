@@ -121,7 +121,11 @@ struct WebRTCMqttFeature {
         
         var directVideoCall: DirectVideoCallFeature.State = DirectVideoCallFeature.State()
         var webRTCFeature: WebRTCFeature.State = WebRTCFeature.State()
+        var deviceStats: DeviceStatsFeature.State = DeviceStatsFeature.State()
+        var ifstat: IfstatFeature.State = IfstatFeature.State()
         var logoRotationAngle: Double = 90.0
+        var showDeviceStats: Bool = false
+        var showIfstat: Bool = false
 
         @Presents var alert: AlertState<Action.Alert>?
 
@@ -140,6 +144,8 @@ struct WebRTCMqttFeature {
         case alert(PresentationAction<Alert>)
         case directVideoCall(DirectVideoCallFeature.Action)
         case webRTCFeature(WebRTCFeature.Action)
+        case deviceStats(DeviceStatsFeature.Action)
+        case ifstat(IfstatFeature.Action)
 
         @CasePathable
         enum ViewAction: Equatable {
@@ -152,6 +158,8 @@ struct WebRTCMqttFeature {
             case clearMessages
             case clearError
             case resetLogoRotation
+            case showDeviceStats(Bool)
+            case showIfstat(Bool)
         }
 
         @CasePathable
@@ -208,6 +216,12 @@ struct WebRTCMqttFeature {
         Scope(state: \.webRTCFeature, action: \.webRTCFeature) {
             WebRTCFeature()
         }
+        Scope(state: \.deviceStats, action: \.deviceStats) {
+            DeviceStatsFeature()
+        }
+        Scope(state: \.ifstat, action: \.ifstat) {
+            IfstatFeature()
+        }
         Reduce(core)
             .ifLet(\.$alert, action: \.alert)
     }
@@ -236,6 +250,12 @@ struct WebRTCMqttFeature {
             return handleWebRTCFeatureDelegate(into: &state, action: delegateAction)
             
         case .webRTCFeature:
+            return .none
+            
+        case .deviceStats:
+            return .none
+            
+        case .ifstat:
             return .none
 
         case .alert(.presented(.confirmDisconnect)):
@@ -369,6 +389,14 @@ struct WebRTCMqttFeature {
             return .run { send in
                 await send(._internal(.setLogoRotation(0)), animation: .bouncy(duration: 1.0))
             }
+            
+        case .showDeviceStats(let show):
+            state.showDeviceStats = show
+            return .none
+            
+        case .showIfstat(let show):
+            state.showIfstat = show
+            return .none
         }
     }
 

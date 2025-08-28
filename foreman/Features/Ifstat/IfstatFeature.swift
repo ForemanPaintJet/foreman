@@ -1,0 +1,254 @@
+//
+//  IfstatFeature.swift
+//  foreman
+//
+//  Created by Claude on 2025/8/28.
+//
+
+import ComposableArchitecture
+import Foundation
+import MQTTNIO
+import MqttClientKit
+import OSLog
+
+// MARK: - MQTT Topics
+
+let ifstatOutputTopic = "network/ifstat/data"     // Receive ifstat data
+
+// MARK: - MQTT Data Models
+
+struct IfstatMqttMessage: Codable, Equatable {
+  let interfaces: [IfstatInterface]
+  let timestamp: Date
+}
+
+struct IfstatInterface: Codable, Equatable {
+  let name: String
+  let uploadSpeed: Double
+  let downloadSpeed: Double
+  let unit: String
+  
+  enum CodingKeys: String, CodingKey {
+    case name = "interface"
+    case uploadSpeed = "upload"
+    case downloadSpeed = "download"
+    case unit
+  }
+}
+
+@Reducer
+struct IfstatFeature {
+  @ObservableState
+  struct State: Equatable {
+    var interfaceData: [NetworkInterfaceData] = [] // Historical data for single interface
+    var targetInterface: String = "en0" // Which interface to monitor
+    var timeRange: TimeInterval = 300 // 5 minutes default
+    var lastRefreshTime: Date = Date()
+    
+    // MQTT State - simplified
+    var isSubscribed: Bool = false
+    
+    var latestData: NetworkInterfaceData? {
+      interfaceData.first
+    }
+  }
+  
+  @CasePathable
+  enum Action: Equatable, BindableAction, ComposableArchitecture.ViewAction {
+    case view(ViewAction)
+    case binding(BindingAction<State>)
+    case _internal(InternalAction)
+    case delegate(DelegateAction)
+    
+    @CasePathable
+    enum ViewAction: Equatable {
+      case task
+      case teardown
+      case changeTimeRange(TimeInterval)
+      case subscribeIfstat
+      case unsubscribeIfstat
+    }
+    
+    @CasePathable
+    enum InternalAction: Equatable {
+      case interfaceDataUpdated([NetworkInterfaceData])
+      case ifstatMessageReceived(MQTTPublishInfo)
+      case parseIfstatData(Data)
+      case subscriptionStatusChanged(Bool)
+    }
+    
+    enum DelegateAction: Equatable {
+      case dataUpdated
+    }
+  }
+  
+  private enum CancelID {
+    case mqttMessages
+  }
+  
+  private let logger = Logger(subsystem: "foreman", category: "IfstatFeature")
+  
+  var body: some ReducerOf<Self> {
+    BindingReducer()
+    Reduce(core)
+  }
+  
+  func core(into state: inout State, action: Action) -> Effect<Action> {
+    switch action {
+    case .binding:
+      return .none
+      
+    case .view(let viewAction):
+      return handleViewAction(into: &state, action: viewAction)
+      
+    case ._internal(let internalAction):
+      return handleInternalAction(into: &state, action: internalAction)
+      
+    case .delegate:
+      return .none
+    }
+  }
+  
+  private func handleViewAction(into state: inout State, action: Action.ViewAction) -> Effect<Action> {
+    switch action {
+    case .task:
+      logger.info("🔄 IfstatFeature: Starting ifstat monitoring")
+      return .send(.view(.subscribeIfstat))
+      
+    case .teardown:
+      return .merge(
+        .send(.view(.unsubscribeIfstat)),
+        .cancel(id: CancelID.mqttMessages)
+      )
+      
+      
+    case .changeTimeRange(let newRange):
+      state.timeRange = newRange
+      return .none
+      
+      
+    case .subscribeIfstat:
+      logger.info("📡 IfstatFeature: Subscribing to ifstat topic")
+      @Dependency(\.mqttClientKit) var mqttClientKit
+      
+      return .run { send in
+        do {
+          let subInfo = MQTTSubscribeInfo(
+            topicFilter: ifstatOutputTopic,
+            qos: .atLeastOnce
+          )
+          _ = try await mqttClientKit.subscribe(subInfo)
+          await send(._internal(.subscriptionStatusChanged(true)))
+          
+          // Start listening for messages
+          for try await message in mqttClientKit.received() {
+            if message.topicName == ifstatOutputTopic {
+              await send(._internal(.ifstatMessageReceived(message)))
+            }
+          }
+        } catch {
+          logger.error("❌ IfstatFeature: Subscribe failed: \(error)")
+        }
+      }
+      .cancellable(id: CancelID.mqttMessages)
+      
+    case .unsubscribeIfstat:
+      guard state.isSubscribed else { return .none }
+      
+      logger.info("📡 IfstatFeature: Unsubscribing from ifstat topic")
+      @Dependency(\.mqttClientKit) var mqttClientKit
+      
+      return .run { send in
+        do {
+          try await mqttClientKit.unsubscribe(ifstatOutputTopic)
+          await send(._internal(.subscriptionStatusChanged(false)))
+        } catch {
+          logger.error("❌ IfstatFeature: Unsubscribe failed: \(error)")
+        }
+      }
+    }
+  }
+  
+  private func handleInternalAction(into state: inout State, action: Action.InternalAction) -> Effect<Action> {
+    switch action {
+    case .interfaceDataUpdated(let newData):
+      state.interfaceData = mergeInterfaceData(existing: state.interfaceData, new: newData)
+      state.lastRefreshTime = Date()
+      return .send(.delegate(.dataUpdated))
+      
+    case .ifstatMessageReceived(let message):
+      logger.info("📥 IfstatFeature: Received ifstat message")
+      if let data = message.payload.getData(at: 0, length: message.payload.readableBytes) {
+        return .send(._internal(.parseIfstatData(data)))
+      }
+      return .none
+      
+    case .parseIfstatData(let data):
+      return parseIfstatJsonData(data, targetInterface: state.targetInterface)
+      
+    case .subscriptionStatusChanged(let isSubscribed):
+      state.isSubscribed = isSubscribed
+      logger.info("📡 IfstatFeature: Subscription status: \(isSubscribed)")
+      return .none
+    }
+  }
+  
+  private func mergeInterfaceData(existing: [NetworkInterfaceData], new: [NetworkInterfaceData]) -> [NetworkInterfaceData] {
+    let maxDataPoints = 1000 // Keep more data points for longer time ranges
+    let combined = existing + new
+    let sorted = combined.sorted { $0.timestamp > $1.timestamp }
+    return Array(sorted.prefix(maxDataPoints))
+  }
+  
+  
+  // MARK: - MQTT Helper Methods
+  
+  private func parseIfstatJsonData(_ data: Data, targetInterface: String) -> Effect<Action> {
+    return .run { send in
+      do {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .secondsSince1970
+        
+        let mqttMessage = try decoder.decode(IfstatMqttMessage.self, from: data)
+        logger.info("✅ IfstatFeature: Parsed \(mqttMessage.interfaces.count) interfaces")
+        
+        // Find data for target interface
+        if let targetInterfaceData = mqttMessage.interfaces.first(where: { $0.name == targetInterface }) {
+          guard let speedUnit = parseSpeedUnit(targetInterfaceData.unit) else {
+            logger.warning("Unknown speed unit: \(targetInterfaceData.unit)")
+            return
+          }
+          
+          let networkData = NetworkInterfaceData(
+            interfaceName: targetInterfaceData.name,
+            uploadSpeed: targetInterfaceData.uploadSpeed,
+            downloadSpeed: targetInterfaceData.downloadSpeed,
+            speedUnit: speedUnit,
+            timestamp: mqttMessage.timestamp
+          )
+          
+          await send(._internal(.interfaceDataUpdated([networkData])))
+        } else {
+          logger.warning("Target interface \(targetInterface) not found in MQTT data")
+        }
+      } catch {
+        logger.error("❌ IfstatFeature: JSON parsing failed: \(error)")
+      }
+    }
+  }
+  
+  private func parseSpeedUnit(_ unit: String) -> NetworkInterfaceData.SpeedUnit? {
+    switch unit.lowercased() {
+    case "b/s", "bytes/s", "bps":
+      return .bytesPerSecond
+    case "kb/s", "kilobytes/s", "kbps":
+      return .kilobytesPerSecond
+    case "mb/s", "megabytes/s", "mbps":
+      return .megabytesPerSecond
+    case "gb/s", "gigabytes/s", "gbps":
+      return .gigabytesPerSecond
+    default:
+      return nil
+    }
+  }
+}

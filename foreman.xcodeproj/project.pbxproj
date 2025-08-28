@@ -38,7 +38,7 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		41D9FCA12E5F119B00ADCFA2 /* Exceptions for "foreman" folder in "foreman" target */ = {
+		41D9FD632E6011A800ADCFA2 /* Exceptions for "foreman" folder in "foreman" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				App/Configuration/Info.plist,
@@ -51,7 +51,7 @@
 		4158982F2E1E8FD900B01E9D /* foreman */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				41D9FCA12E5F119B00ADCFA2 /* Exceptions for "foreman" folder in "foreman" target */,
+				41D9FD632E6011A800ADCFA2 /* Exceptions for "foreman" folder in "foreman" target */,
 			);
 			path = foreman;
 			sourceTree = "<group>";

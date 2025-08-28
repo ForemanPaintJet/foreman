@@ -87,6 +87,21 @@ struct WebRTCMqttView: View {
                                     }
                                     .disabled(store.connectionStatus != .connected)
                                 }
+                                
+                                // Stats Buttons
+                                if store.connectionStatus == .connected {
+                                    HStack(spacing: 8) {
+                                        Button("設備統計") {
+                                            send(.showDeviceStats(true))
+                                        }
+                                        .buttonStyle(.bordered)
+                                        
+                                        Button("ifstat 監控") {
+                                            send(.showIfstat(true))
+                                        }
+                                        .buttonStyle(.borderedProminent)
+                                    }
+                                }
                             }
                             .padding()
                             .background(
@@ -104,6 +119,16 @@ struct WebRTCMqttView: View {
             send(.task)
         }
         .alert($store.scope(state: \.alert, action: \.alert))
+        .sheet(isPresented: $store.showDeviceStats) {
+            SimpleDeviceStatsView(
+                store: store.scope(state: \.deviceStats, action: \.deviceStats)
+            )
+        }
+        .sheet(isPresented: $store.showIfstat) {
+            IfstatView(
+                store: store.scope(state: \.ifstat, action: \.ifstat)
+            )
+        }
     }
 }
 
