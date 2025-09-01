@@ -45,8 +45,8 @@ struct IfstatFeature {
     var timeRange: TimeInterval = 300 // 5 minutes default
     var lastRefreshTime: Date = Date()
     
-    // MQTT State - simplified
-    var isSubscribed: Bool = false
+    // MQTT Subscriber Feature for handling ifstat data  
+    var mqttSubscriber: MqttSubscriberFeature.State = MqttSubscriberFeature.State()
     
     var latestData: NetworkInterfaceData? {
       interfaceData.first
@@ -59,22 +59,19 @@ struct IfstatFeature {
     case binding(BindingAction<State>)
     case _internal(InternalAction)
     case delegate(DelegateAction)
+    case mqttSubscriber(MqttSubscriberFeature.Action)
     
     @CasePathable
     enum ViewAction: Equatable {
       case task
       case teardown
       case changeTimeRange(TimeInterval)
-      case subscribeIfstat
-      case unsubscribeIfstat
     }
     
     @CasePathable
     enum InternalAction: Equatable {
       case interfaceDataUpdated([NetworkInterfaceData])
-      case ifstatMessageReceived(MQTTPublishInfo)
       case parseIfstatData(Data)
-      case subscriptionStatusChanged(Bool)
     }
     
     enum DelegateAction: Equatable {
@@ -90,6 +87,9 @@ struct IfstatFeature {
   
   var body: some ReducerOf<Self> {
     BindingReducer()
+    Scope(state: \.mqttSubscriber, action: \.mqttSubscriber) {
+      MqttSubscriberFeature()
+    }
     Reduce(core)
   }
   
@@ -106,6 +106,12 @@ struct IfstatFeature {
       
     case .delegate:
       return .none
+      
+    case .mqttSubscriber(.delegate(let delegateAction)):
+      return handleMqttSubscriberDelegate(into: &state, action: delegateAction)
+      
+    case .mqttSubscriber:
+      return .none
     }
   }
   
@@ -113,59 +119,16 @@ struct IfstatFeature {
     switch action {
     case .task:
       logger.info("🔄 IfstatFeature: Starting ifstat monitoring")
-      return .send(.view(.subscribeIfstat))
+      // Subscribe to ifstat output topic using new API
+      return .send(.mqttSubscriber(.view(.subscribe(MQTTSubscribeInfo(topicFilter: ifstatOutputTopic, qos: .atLeastOnce)))))
       
     case .teardown:
-      return .merge(
-        .send(.view(.unsubscribeIfstat)),
-        .cancel(id: CancelID.mqttMessages)
-      )
+      return .cancel(id: CancelID.mqttMessages)
       
       
     case .changeTimeRange(let newRange):
       state.timeRange = newRange
       return .none
-      
-      
-    case .subscribeIfstat:
-      logger.info("📡 IfstatFeature: Subscribing to ifstat topic")
-      @Dependency(\.mqttClientKit) var mqttClientKit
-      
-      return .run { send in
-        do {
-          let subInfo = MQTTSubscribeInfo(
-            topicFilter: ifstatOutputTopic,
-            qos: .atLeastOnce
-          )
-          _ = try await mqttClientKit.subscribe(subInfo)
-          await send(._internal(.subscriptionStatusChanged(true)))
-          
-          // Start listening for messages
-          for try await message in mqttClientKit.received() {
-            if message.topicName == ifstatOutputTopic {
-              await send(._internal(.ifstatMessageReceived(message)))
-            }
-          }
-        } catch {
-          logger.error("❌ IfstatFeature: Subscribe failed: \(error)")
-        }
-      }
-      .cancellable(id: CancelID.mqttMessages)
-      
-    case .unsubscribeIfstat:
-      guard state.isSubscribed else { return .none }
-      
-      logger.info("📡 IfstatFeature: Unsubscribing from ifstat topic")
-      @Dependency(\.mqttClientKit) var mqttClientKit
-      
-      return .run { send in
-        do {
-          try await mqttClientKit.unsubscribe(ifstatOutputTopic)
-          await send(._internal(.subscriptionStatusChanged(false)))
-        } catch {
-          logger.error("❌ IfstatFeature: Unsubscribe failed: \(error)")
-        }
-      }
     }
   }
   
@@ -176,20 +139,8 @@ struct IfstatFeature {
       state.lastRefreshTime = Date()
       return .send(.delegate(.dataUpdated))
       
-    case .ifstatMessageReceived(let message):
-      logger.info("📥 IfstatFeature: Received ifstat message")
-      if let data = message.payload.getData(at: 0, length: message.payload.readableBytes) {
-        return .send(._internal(.parseIfstatData(data)))
-      }
-      return .none
-      
     case .parseIfstatData(let data):
       return parseIfstatJsonData(data, targetInterface: state.targetInterface)
-      
-    case .subscriptionStatusChanged(let isSubscribed):
-      state.isSubscribed = isSubscribed
-      logger.info("📡 IfstatFeature: Subscription status: \(isSubscribed)")
-      return .none
     }
   }
   
@@ -198,6 +149,34 @@ struct IfstatFeature {
     let combined = existing + new
     let sorted = combined.sorted { $0.timestamp > $1.timestamp }
     return Array(sorted.prefix(maxDataPoints))
+  }
+  
+  // MARK: - MQTT Subscriber Delegate Handling
+  
+    private func handleMqttSubscriberDelegate(into state: inout State, action: MqttSubscriberFeature.Action.Delegate) -> Effect<Action> {
+    switch action {
+    case .messageReceived(let message):
+      guard message.topicName == ifstatOutputTopic else {
+        return .none
+      }
+      logger.info("📥 IfstatFeature: Received ifstat message")
+      if let data = message.payload.getData(at: 0, length: message.payload.readableBytes) {
+        return .send(._internal(.parseIfstatData(data)))
+      }
+      return .none
+      
+    case .subscriptionAdded(let subscriptionInfo):
+      logger.info("🜢 IfstatFeature: Subscribed to topic: \(subscriptionInfo.topicFilter)")
+      return .none
+      
+    case .subscriptionRemoved(let topic):
+      logger.info("🟠 IfstatFeature: Unsubscribed from topic: \(topic)")
+      return .none
+      
+    case .errorOccurred(let error):
+      logger.error("🔴 IfstatFeature: MQTT Subscriber error: \(error)")
+      return .none
+    }
   }
   
   

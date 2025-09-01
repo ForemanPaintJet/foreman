@@ -8,9 +8,10 @@
 
 /* Begin PBXBuildFile section */
 		4143EAAB2E574BA90063D0EA /* WebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = 4143EAAA2E574BA90063D0EA /* WebRTC */; };
+		4166AF712E6571D60030F8BD /* MqttClientKit in Frameworks */ = {isa = PBXBuildFile; productRef = 4166AF702E6571D60030F8BD /* MqttClientKit */; };
+		4166AF732E6571D60030F8BD /* MqttFeatures in Frameworks */ = {isa = PBXBuildFile; productRef = 4166AF722E6571D60030F8BD /* MqttFeatures */; };
 		4195BA6A2E5D5EBB003A7422 /* WebRTCCore in Frameworks */ = {isa = PBXBuildFile; productRef = 4195BA692E5D5EBB003A7422 /* WebRTCCore */; };
 		41B494572E16BA3900890E09 /* ComposableArchitecture in Frameworks */ = {isa = PBXBuildFile; productRef = 41B494562E16BA3900890E09 /* ComposableArchitecture */; };
-		41CE97EF2E29FD0500C7FAAF /* MqttClientKit in Frameworks */ = {isa = PBXBuildFile; productRef = 41CE97EE2E29FD0500C7FAAF /* MqttClientKit */; };
 		41DECCD22E1E55D800C52C6F /* ForemanThemeCore in Frameworks */ = {isa = PBXBuildFile; productRef = 41DECCD12E1E55D800C52C6F /* ForemanThemeCore */; };
 /* End PBXBuildFile section */
 
@@ -74,10 +75,11 @@
 			buildActionMask = 2147483647;
 			files = (
 				4143EAAB2E574BA90063D0EA /* WebRTC in Frameworks */,
+				4166AF712E6571D60030F8BD /* MqttClientKit in Frameworks */,
 				41B494572E16BA3900890E09 /* ComposableArchitecture in Frameworks */,
+				4166AF732E6571D60030F8BD /* MqttFeatures in Frameworks */,
 				4195BA6A2E5D5EBB003A7422 /* WebRTCCore in Frameworks */,
 				41DECCD22E1E55D800C52C6F /* ForemanThemeCore in Frameworks */,
-				41CE97EF2E29FD0500C7FAAF /* MqttClientKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -148,9 +150,10 @@
 			packageProductDependencies = (
 				41B494562E16BA3900890E09 /* ComposableArchitecture */,
 				41DECCD12E1E55D800C52C6F /* ForemanThemeCore */,
-				41CE97EE2E29FD0500C7FAAF /* MqttClientKit */,
 				4143EAAA2E574BA90063D0EA /* WebRTC */,
 				4195BA692E5D5EBB003A7422 /* WebRTCCore */,
+				4166AF702E6571D60030F8BD /* MqttClientKit */,
+				4166AF722E6571D60030F8BD /* MqttFeatures */,
 			);
 			productName = foreman;
 			productReference = 41A1FB7A2E16AF3200A9EDA5 /* foreman.app */;
@@ -238,8 +241,8 @@
 				41B4944F2E16B07100890E09 /* XCRemoteSwiftPackageReference "swift-composable-architecture" */,
 				41B494502E16B10A00890E09 /* XCRemoteSwiftPackageReference "WebRTC" */,
 				41DECCD02E1E559100C52C6F /* XCLocalSwiftPackageReference "Packages/ForemanThemeCore" */,
-				41CE97ED2E29FCF200C7FAAF /* XCRemoteSwiftPackageReference "MqttClientKit" */,
 				4195BA682E5D5E4F003A7422 /* XCRemoteSwiftPackageReference "WebRTCCore" */,
+				4106299E2E656745009FACD9 /* XCRemoteSwiftPackageReference "MqttClientKit" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 41A1FB7B2E16AF3200A9EDA5 /* Products */;
@@ -652,6 +655,14 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		4106299E2E656745009FACD9 /* XCRemoteSwiftPackageReference "MqttClientKit" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/Paintjed/MqttClientKit";
+			requirement = {
+				branch = refactorTCAPatterns;
+				kind = branch;
+			};
+		};
 		4195BA682E5D5E4F003A7422 /* XCRemoteSwiftPackageReference "WebRTCCore" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/Paintjed/WebRTCCore";
@@ -676,14 +687,6 @@
 				minimumVersion = 137.0.0;
 			};
 		};
-		41CE97ED2E29FCF200C7FAAF /* XCRemoteSwiftPackageReference "MqttClientKit" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/Paintjed/MqttClientKit";
-			requirement = {
-				branch = main;
-				kind = branch;
-			};
-		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -691,6 +694,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 41B494502E16B10A00890E09 /* XCRemoteSwiftPackageReference "WebRTC" */;
 			productName = WebRTC;
+		};
+		4166AF702E6571D60030F8BD /* MqttClientKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4106299E2E656745009FACD9 /* XCRemoteSwiftPackageReference "MqttClientKit" */;
+			productName = MqttClientKit;
+		};
+		4166AF722E6571D60030F8BD /* MqttFeatures */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4106299E2E656745009FACD9 /* XCRemoteSwiftPackageReference "MqttClientKit" */;
+			productName = MqttFeatures;
 		};
 		4195BA692E5D5EBB003A7422 /* WebRTCCore */ = {
 			isa = XCSwiftPackageProductDependency;
@@ -701,11 +714,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 41B4944F2E16B07100890E09 /* XCRemoteSwiftPackageReference "swift-composable-architecture" */;
 			productName = ComposableArchitecture;
-		};
-		41CE97EE2E29FD0500C7FAAF /* MqttClientKit */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 41CE97ED2E29FCF200C7FAAF /* XCRemoteSwiftPackageReference "MqttClientKit" */;
-			productName = MqttClientKit;
 		};
 		41DECCD12E1E55D800C52C6F /* ForemanThemeCore */ = {
 			isa = XCSwiftPackageProductDependency;

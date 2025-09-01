@@ -20,7 +20,7 @@ struct IfstatView: View {
       targetInterface: store.targetInterface,
       timeRange: store.timeRange,
       lastRefreshTime: store.lastRefreshTime,
-      isSubscribed: store.isSubscribed,
+      isSubscribed: true,
       onTimeRangeChange: { newRange in
         send(.changeTimeRange(newRange))
       }
