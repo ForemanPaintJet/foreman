@@ -7,13 +7,13 @@
 
 import ComposableArchitecture
 import Foundation
-import MQTTNIO
 import MqttClientKit
+import MQTTNIO
 import OSLog
 
 // MARK: - MQTT Topics
 
-let ifstatOutputTopic = "network/ifstat/data"  // Receive ifstat data
+let ifstatOutputTopic = "network/ifstat/data" // Receive ifstat data
 
 // MARK: - MQTT Data Models
 
@@ -27,12 +27,13 @@ struct IfstatFeature {
     @ObservableState
     struct State: Equatable {
         var interfaceData: [IfstatMqttMessage] = []
-        var topicName: String = ifstatOutputTopic  // MQTT topic name used as view name
-        var timeRange: TimeInterval = 300  // 5 minutes default
-        var lastRefreshTime: Date = Date()
+        var topicName: String = ifstatOutputTopic // MQTT topic name used as view name
+        var timeRange: TimeInterval = 300 // 5 minutes default
+        var lastRefreshTime: Date = .init()
+        var lastError: String?
 
         // MQTT Subscriber Feature for handling ifstat data
-        var mqttSubscriber: MqttSubscriberFeature.State = MqttSubscriberFeature.State()
+        var mqttSubscriber: MqttSubscriberFeature.State = .init()
 
         var latestData: IfstatMqttMessage? {
             interfaceData.first
@@ -52,6 +53,7 @@ struct IfstatFeature {
             case task
             case teardown
             case changeTimeRange(TimeInterval)
+            case clearError
         }
 
         @CasePathable
@@ -59,6 +61,7 @@ struct IfstatFeature {
             case interfaceDataUpdated([IfstatMqttMessage])
             case parseIfstatData(Data)
             case updateLastRefreshTime
+            case parsingError(String)
         }
 
         enum DelegateAction: Equatable {
@@ -109,14 +112,12 @@ struct IfstatFeature {
         case .task:
             logger.info("🔄 IfstatFeature: Starting realtime ifstat monitoring")
             // Subscribe to ifstat output topic with realtime updates
-            return .merge(
-                .send(
-                    .mqttSubscriber(
-                        .view(
-                            .subscribe(
-                                MQTTSubscribeInfo(topicFilter: ifstatOutputTopic, qos: .atLeastOnce))))),
-                // Start realtime update timer
-            )
+            return .run { send in
+                await send(.mqttSubscriber(.view(.task)))
+                await send(.mqttSubscriber(.view(.subscribe(
+                    MQTTSubscribeInfo(topicFilter: ifstatOutputTopic, qos: .atLeastOnce)
+                ))))
+            }
 
         case .teardown:
             return .merge(
@@ -129,6 +130,10 @@ struct IfstatFeature {
             let cutoffTime = Date().addingTimeInterval(-newRange)
             state.interfaceData = state.interfaceData.filter { $0.timestamp >= cutoffTime }
             return .none
+
+        case .clearError:
+            state.lastError = nil
+            return .none
         }
     }
 
@@ -139,18 +144,23 @@ struct IfstatFeature {
         case .interfaceDataUpdated(let newData):
             state.interfaceData = mergeInterfaceData(existing: state.interfaceData, new: newData)
             state.lastRefreshTime = Date()
-            
+
             // Keep only data within current time range for realtime performance
             let cutoffTime = Date().addingTimeInterval(-state.timeRange)
             state.interfaceData = state.interfaceData.filter { $0.timestamp >= cutoffTime }
-            
+
             return .send(.delegate(.dataUpdated))
 
         case .parseIfstatData(let data):
             return parseIfstatJsonData(data)
-            
+
         case .updateLastRefreshTime:
             // This helps keep UI responsive and updates relative time display
+            return .none
+
+        case .parsingError(let error):
+            logger.error("❌ IfstatFeature: Parsing error occurred: \(error)")
+            state.lastError = error
             return .none
         }
     }
@@ -159,9 +169,9 @@ struct IfstatFeature {
         -> [IfstatMqttMessage]
     {
         // For realtime performance, keep more recent data and limit total points
-        let maxDataPoints = 200  // Increased for better chart resolution
+        let maxDataPoints = 200 // Increased for better chart resolution
         let combined = existing + new
-        
+
         // Sort by timestamp (newest first) and take only recent data points
         return Array(combined.sorted { $0.timestamp > $1.timestamp }.prefix(maxDataPoints))
     }
@@ -169,8 +179,8 @@ struct IfstatFeature {
     // MARK: - MQTT Subscriber Delegate Handling
 
     private func handleMqttSubscriberDelegate(
-        into state: inout State, action: MqttSubscriberFeature.Action.Delegate
-    ) -> Effect<Action> {
+        into state: inout State, action: MqttSubscriberFeature.Action.Delegate) -> Effect<Action>
+    {
         switch action {
         case .messageReceived(let message):
             guard message.topicName == ifstatOutputTopic else {
@@ -210,8 +220,8 @@ struct IfstatFeature {
                 await send(._internal(.interfaceDataUpdated([mqttMessage])))
             } catch {
                 logger.error("❌ IfstatFeature: JSON parsing failed: \(error)")
+                await send(._internal(.parsingError(error.localizedDescription)))
             }
         }
     }
-
 }

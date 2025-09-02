@@ -25,6 +25,10 @@ struct IfstatView: View {
     NavigationView {
       ScrollView {
         VStack(spacing: 20) {
+          if let error = store.lastError {
+            errorBanner(error: error)
+          }
+          
           headerView
           
           if hasData {
@@ -236,6 +240,42 @@ struct IfstatView: View {
     }
   }
   
+  @ViewBuilder
+  private func errorBanner(error: String) -> some View {
+    HStack(spacing: 12) {
+      Image(systemName: "exclamationmark.triangle.fill")
+        .foregroundColor(.white)
+        .font(.system(size: 16, weight: .medium))
+      
+      VStack(alignment: .leading, spacing: 2) {
+        Text("解析錯誤")
+          .font(.headline)
+          .foregroundColor(.white)
+        
+        Text(error)
+          .font(.caption)
+          .foregroundColor(.white.opacity(0.9))
+          .lineLimit(2)
+      }
+      
+      Spacer()
+      
+      Button(action: {
+        send(.clearError)
+      }) {
+        Image(systemName: "xmark.circle.fill")
+          .foregroundColor(.white.opacity(0.7))
+          .font(.system(size: 20))
+      }
+      .buttonStyle(.plain)
+    }
+    .padding()
+    .background(Color.red)
+    .cornerRadius(12)
+    .transition(.slide.combined(with: .opacity))
+    .animation(.easeInOut(duration: 0.3), value: store.lastError != nil)
+  }
+  
   private func formatRelativeTime(_ date: Date) -> String {
     let interval = Date().timeIntervalSince(date)
     
@@ -253,12 +293,12 @@ struct IfstatView: View {
   IfstatView(
     store: .init(
       initialState: IfstatFeature.State(
-        topicName: "network/ifstat/data"
+        topicName: ifstatOutputTopic
       ),
       reducer: {
-        IfstatFeature()._printChanges()
+        IfstatFeature()
       }, withDependencies: {
-          $0.mqttClientKit = .testValue
+          $0.mqttClientKit = .previewValue
       }
     )
   )

@@ -5,6 +5,7 @@
 //  Created by Claude on 2025/9/2.
 //
 
+import Foundation
 import MqttClientKit
 import SwiftUI
 import NIOCore
@@ -46,10 +47,21 @@ extension MqttClientKit {
           Task {
             while !Task.isCancelled {
               let randomInt = Int.random(in: 1...100)
-              let mockPayload = "\(randomInt)".data(using: .utf8) ?? Data()
+              let currentTimestamp = Date().timeIntervalSince1970
               
-              // Create mock MQTTPublishInfo with random int value
-            let mockMessage = MQTTPublishInfo(qos: .atMostOnce, retain: false, topicName: "network/ifstat/data", payload: ByteBuffer(data: mockPayload), properties: [])
+              // Create IfstatMqttMessage with proper format
+              let ifstatMessage = IfstatMqttMessage(
+                value: randomInt, 
+                timestamp: Date(timeIntervalSince1970: currentTimestamp)
+              )
+              
+              // Encode to JSON data matching the expected format
+              let encoder = JSONEncoder()
+              encoder.dateEncodingStrategy = .secondsSince1970
+              let mockPayload = try! encoder.encode(ifstatMessage)
+              
+              // Create mock MQTTPublishInfo with JSON payload
+              let mockMessage = MQTTPublishInfo(qos: .atMostOnce, retain: false, topicName: ifstatOutputTopic, payload: ByteBuffer(data: mockPayload), properties: [])
               
               continuation.yield(mockMessage)
               

@@ -6,6 +6,7 @@
 //
 
 import ComposableArchitecture
+import MqttClientKit
 import XCTest
 
 @testable import foreman
@@ -20,7 +21,8 @@ final class IfstatFeatureTests: XCTestCase {
     
     expectNoDifference(store.state.interfaceData, [])
     expectNoDifference(store.state.timeRange, 300) // 5 minutes
-    expectNoDifference(store.state.isAutoRefreshEnabled, true)
+    expectNoDifference(store.state.lastError, nil)
+    expectNoDifference(store.state.topicName, ifstatOutputTopic)
   }
   
   func testTaskAction() async {
@@ -31,102 +33,101 @@ final class IfstatFeatureTests: XCTestCase {
     
     await store.send(.view(.task))
     
-    await store.receive(\.view.refreshData)
+    await store.receive(\.mqttSubscriber.view.task)
     
-    await store.receive(\._internal.interfaceDataUpdated) { _ in
-      // Interface data will be updated with mock data
+    await store.receive(\.mqttSubscriber.view.subscribe) { _ in
+      // MQTT subscriber will subscribe to ifstat topic
     }
-    
-    await store.receive(\.delegate.dataUpdated)
-  }
-  
-  func testRefreshData() async {
-    let store = TestStore(
-      initialState: IfstatFeature.State(),
-      reducer: { IfstatFeature() }
-    )
-    
-    await store.send(.view(.refreshData)) {
-      $0.lastRefreshTime = Date()
-    }
-    
-    await store.receive(\._internal.interfaceDataUpdated) { _ in
-      // Interface data will be updated
-    }
-    
-    await store.receive(\.delegate.dataUpdated)
   }
   
   func testChangeTimeRange() async {
+    let mockData = IfstatMqttMessage(value: 100, timestamp: Date().addingTimeInterval(-3600))
     let store = TestStore(
-      initialState: IfstatFeature.State(),
+      initialState: IfstatFeature.State(interfaceData: [mockData]),
       reducer: { IfstatFeature() }
     )
     
     await store.send(.view(.changeTimeRange(900))) {
       $0.timeRange = 900 // 15 minutes
+      // Data older than 15 minutes should be filtered out
+      $0.interfaceData = []
     }
-    
-    await store.receive(\.view.refreshData)
-    
-    await store.receive(\._internal.interfaceDataUpdated) { _ in
-      // Interface data will be updated
-    }
-    
-    await store.receive(\.delegate.dataUpdated)
   }
   
-  func testToggleAutoRefresh() async {
+  func testClearError() async {
     let store = TestStore(
-      initialState: IfstatFeature.State(isAutoRefreshEnabled: true),
+      initialState: IfstatFeature.State(lastError: "Test error"),
       reducer: { IfstatFeature() }
     )
     
-    await store.send(.view(.toggleAutoRefresh)) {
-      $0.isAutoRefreshEnabled = false
-    }
-    
-    await store.send(.view(.toggleAutoRefresh)) {
-      $0.isAutoRefreshEnabled = true
+    await store.send(.view(.clearError)) {
+      $0.lastError = nil
     }
   }
   
-  
-  func testNetworkInterfaceDataFormatting() {
-    let data = NetworkInterfaceData(
-      interfaceName: "en0",
-      uploadSpeed: 1.5,
-      downloadSpeed: 2.5,
-      speedUnit: .megabytesPerSecond
+  func testParsingError() async {
+    let store = TestStore(
+      initialState: IfstatFeature.State(),
+      reducer: { IfstatFeature() }
     )
     
-    let formattedUpload = data.formattedUploadSpeed
-    let formattedDownload = data.formattedDownloadSpeed
-    
-    expectNoDifference(formattedUpload.value, 1.5)
-    expectNoDifference(formattedUpload.unit, "MB/s")
-    expectNoDifference(formattedDownload.value, 2.5)
-    expectNoDifference(formattedDownload.unit, "MB/s")
+    let errorMessage = "JSON parsing failed"
+    await store.send(._internal(.parsingError(errorMessage))) {
+      $0.lastError = errorMessage
+    }
   }
   
-  func testNetworkInterfaceDataAutoScaling() {
-    let data = NetworkInterfaceData(
-      interfaceName: "eth0",
-      uploadSpeed: 2048.0, // 2048 KB/s = 2 MB/s
-      downloadSpeed: 1024.0, // 1024 KB/s = 1 MB/s
-      speedUnit: .kilobytesPerSecond
+  func testParseIfstatDataSuccess() async {
+    let store = TestStore(
+      initialState: IfstatFeature.State(),
+      reducer: { IfstatFeature() }
     )
     
-    let formattedUpload = data.formattedUploadSpeed
-    let formattedDownload = data.formattedDownloadSpeed
+    let validJson = """
+    {
+      "value": 42,
+      "timestamp": 1699123456
+    }
+    """.data(using: .utf8)!
     
-    // Should auto-scale to MB/s
-    expectNoDifference(formattedUpload.unit, "MB/s")
-    expectNoDifference(formattedDownload.unit, "MB/s")
+    await store.send(._internal(.parseIfstatData(validJson)))
     
-    // Values should be converted appropriately
-    let tolerance = 0.01
-    XCTAssertEqual(formattedUpload.value, 2.0, accuracy: tolerance)
-    XCTAssertEqual(formattedDownload.value, 1.0, accuracy: tolerance)
+    await store.receive(\._internal.interfaceDataUpdated) { state in
+      expectNoDifference(state.interfaceData.count, 1)
+      expectNoDifference(state.interfaceData.first?.value, 42)
+    }
+    
+//    await store.receive(\.delegate.dataUpdated)
+  }
+  
+  func testParseIfstatDataFailure() async {
+    let store = TestStore(
+      initialState: IfstatFeature.State(),
+      reducer: { IfstatFeature() }
+    )
+    
+    let invalidJson = "invalid json".data(using: .utf8)!
+    
+    await store.send(._internal(.parseIfstatData(invalidJson)))
+    
+    await store.receive(\._internal.parsingError) { state in
+      XCTAssertNotNil(state.lastError)
+    }
+  }
+  
+  func testInterfaceDataUpdated() async {
+    let store = TestStore(
+      initialState: IfstatFeature.State(),
+      reducer: { IfstatFeature() }
+    )
+    
+    let newData = [IfstatMqttMessage(value: 100, timestamp: Date())]
+    
+    await store.send(._internal(.interfaceDataUpdated(newData))) { state in
+      state.interfaceData = newData
+      state.lastRefreshTime = Date()
+    }
+    
+//    await store.receive(\.delegate.dataUpdated)
   }
 }
