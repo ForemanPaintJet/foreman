@@ -1,5 +1,5 @@
 {
-  "originHash" : "541b160eaf0622289ba6291687974d87e23a4088a80fade87fd9fa47f2911fe5",
+  "originHash" : "60a8bca3d47c082dfafdaf443ed90dac582e46274d91a22c7d16a257e3c19757",
   "pins" : [
     {
       "identity" : "combine-schedulers",
@@ -25,7 +25,7 @@
       "location" : "https://github.com/Paintjed/MqttClientKit",
       "state" : {
         "branch" : "refactorTCAPatterns",
-        "revision" : "c5b822a34f77ebf97b7e6f022610d0973a3a9ed0"
+        "revision" : "bbce978b6d1aa90b9c1252d4d30e9bff1127fde8"
       }
     },
     {

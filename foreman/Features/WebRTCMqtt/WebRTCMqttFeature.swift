@@ -106,9 +106,9 @@ struct WebRTCMqttFeature {
         var loadingItems: Set<LoadingItem> = []
         var mqttFeature: MqttFeature.State = MqttFeature.State(
             connectionInfo: MqttClientKitInfo(
-                address: "192.168.1.103",
+                address: "192.168.1.102",
                 port: 1883,
-                clientID: ""
+                clientID: "user_F1111"
             )
         )
 
@@ -280,7 +280,7 @@ struct WebRTCMqttFeature {
             return .none
 
         case .alert(.presented(.confirmDisconnect)):
-            return .send(.mqttFeature(.view(.disconnectButtonTapped)))
+            return .send(.mqttFeature(.view(.disconnect)))
 
         case .alert(.presented(.confirmLeaveRoom)):
             return .send(.view(.leaveRoom))
@@ -303,7 +303,11 @@ struct WebRTCMqttFeature {
                 "🟠 [WebRTCMqttFeature] task: Generating default userId and starting WebRTC feature")
             state.generateDefaultUserId()
             // Start the WebRTCFeature which will handle WebRTC events through its delegate
-            return .send(.webRTCFeature(.view(.task)))
+            // Also start the MqttFeature task which automatically triggers subscriber.task
+            return .merge(
+                .send(.webRTCFeature(.view(.task))),
+                .send(.mqttFeature(.view(.task)))
+            )
             
         case .teardown:
             return .cancel(id: CancelID.stream)
@@ -326,9 +330,9 @@ struct WebRTCMqttFeature {
                 "🟠 [MQTT] Connecting to broker: address=\(address), port=\(port), clientID=\(clientId)"
             )
             
-            return .send(.mqttFeature(.view(.connectButtonTapped)))
+            return .send(.mqttFeature(.view(.connect)))
         case .disconnect:
-            return .send(.mqttFeature(.view(.disconnectButtonTapped)))
+            return .send(.mqttFeature(.view(.disconnect)))
             
         case .joinRoom:
             guard !state.userId.isEmpty else {
