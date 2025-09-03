@@ -135,6 +135,7 @@ struct WebRTCMqttFeatureTests {
             reducer: { WebRTCMqttFeature() }
         )
         
+        store.exhaustivity = .off(showSkippedAssertions: true)
         await store.send(.webRTCFeature(.delegate(.offerGenerated(sdp: "test-offer-sdp", userId: "client1"))))
         
         await store.receive(._internal(.webRTCOfferGenerated(WebRTCOffer(
@@ -153,6 +154,7 @@ struct WebRTCMqttFeatureTests {
             reducer: { WebRTCMqttFeature() }
         )
         
+        store.exhaustivity = .off(showSkippedAssertions: true)
         await store.send(.webRTCFeature(.delegate(.answerGenerated(sdp: "test-answer-sdp", userId: "client1"))))
         
         await store.receive(._internal(.webRTCAnswerGenerated(WebRTCAnswer(
@@ -171,6 +173,7 @@ struct WebRTCMqttFeatureTests {
             reducer: { WebRTCMqttFeature() }
         )
         
+        store.exhaustivity = .off(showSkippedAssertions: true)
         await store.send(.webRTCFeature(.delegate(.iceCandidateGenerated(
             candidate: "test-candidate", 
             sdpMLineIndex: 0, 

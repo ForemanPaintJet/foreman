@@ -64,6 +64,7 @@ struct IfstatFeature {
             case parsingError(String)
         }
 
+        @CasePathable
         enum DelegateAction: Equatable {
             case dataUpdated
         }
@@ -140,10 +141,11 @@ struct IfstatFeature {
     private func handleInternalAction(into state: inout State, action: Action.InternalAction)
         -> Effect<Action>
     {
+        @Dependency(\.date) var date
         switch action {
         case .interfaceDataUpdated(let newData):
             state.interfaceData = mergeInterfaceData(existing: state.interfaceData, new: newData)
-            state.lastRefreshTime = Date()
+            state.lastRefreshTime = date.now
 
             // Keep only data within current time range for realtime performance
             let cutoffTime = Date().addingTimeInterval(-state.timeRange)
