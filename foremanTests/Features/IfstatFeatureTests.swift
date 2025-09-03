@@ -70,7 +70,7 @@ final class IfstatFeatureTests: XCTestCase {
     )
     
     let errorMessage = "JSON parsing failed"
-    await store.send(._internal(.parsingError(errorMessage))) {
+    await store.send(.parser(.delegate(.parsingFailed(errorMessage)))) {
       $0.lastError = errorMessage
     }
   }
@@ -95,7 +95,9 @@ final class IfstatFeatureTests: XCTestCase {
     }
     """.data(using: .utf8)!
     
-    await store.send(._internal(.parseIfstatData(validJson)))
+    await store.send(.parser(.parseData(validJson)))
+    
+    await store.receive(\.parser.delegate.parsed)
     
     await store.receive(\._internal.interfaceDataUpdated) { state in
       state.lastRefreshTime = fixedDate
@@ -112,13 +114,12 @@ final class IfstatFeatureTests: XCTestCase {
     
     let invalidJson = "invalid json".data(using: .utf8)!
     
-    store.exhaustivity = .off(showSkippedAssertions: true)
+    store.exhaustivity = .off(showSkippedAssertions: false)
     
-    await store.send(._internal(.parseIfstatData(invalidJson)))
+    await store.send(.parser(.parseData(invalidJson)))
     
-    await store.receive(\._internal.parsingError) { state in
+    await store.receive(\.parser.delegate.parsingFailed) { state in
       state.lastError = "The data couldn’t be read because it isn’t in the correct format."
-//      XCTAssertNotNil(state.lastError)
     }
   }
   

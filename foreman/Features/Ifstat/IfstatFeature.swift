@@ -34,6 +34,9 @@ struct IfstatFeature {
 
         // MQTT Subscriber Feature for handling ifstat data
         var mqttSubscriber: MqttSubscriberFeature.State = .init()
+        
+        // JSON Parser Feature for parsing ifstat data
+        var parser: CodableParserFeature<IfstatMqttMessage>.State = .init()
 
         var latestData: IfstatMqttMessage? {
             interfaceData.first
@@ -47,6 +50,7 @@ struct IfstatFeature {
         case _internal(InternalAction)
         case delegate(DelegateAction)
         case mqttSubscriber(MqttSubscriberFeature.Action)
+        case parser(CodableParserFeature<IfstatMqttMessage>.Action)
 
         @CasePathable
         enum ViewAction: Equatable {
@@ -59,9 +63,7 @@ struct IfstatFeature {
         @CasePathable
         enum InternalAction: Equatable {
             case interfaceDataUpdated([IfstatMqttMessage])
-            case parseIfstatData(Data)
             case updateLastRefreshTime
-            case parsingError(String)
         }
 
         @CasePathable
@@ -80,6 +82,9 @@ struct IfstatFeature {
         BindingReducer()
         Scope(state: \.mqttSubscriber, action: \.mqttSubscriber) {
             MqttSubscriberFeature()
+        }
+        Scope(state: \.parser, action: \.parser) {
+            CodableParserFeature<IfstatMqttMessage>()
         }
         Reduce(core)
     }
@@ -102,6 +107,12 @@ struct IfstatFeature {
             return handleMqttSubscriberDelegate(into: &state, action: delegateAction)
 
         case .mqttSubscriber:
+            return .none
+            
+        case .parser(.delegate(let delegateAction)):
+            return handleParserDelegate(into: &state, action: delegateAction)
+            
+        case .parser:
             return .none
         }
     }
@@ -153,16 +164,8 @@ struct IfstatFeature {
 
             return .send(.delegate(.dataUpdated))
 
-        case .parseIfstatData(let data):
-            return parseIfstatJsonData(data)
-
         case .updateLastRefreshTime:
             // This helps keep UI responsive and updates relative time display
-            return .none
-
-        case .parsingError(let error):
-            logger.error("❌ IfstatFeature: Parsing error occurred: \(error)")
-            state.lastError = error
             return .none
         }
     }
@@ -190,7 +193,7 @@ struct IfstatFeature {
             }
             logger.info("📥 IfstatFeature: Received ifstat message")
             if let data = message.payload.getData(at: 0, length: message.payload.readableBytes) {
-                return .send(._internal(.parseIfstatData(data)))
+                return .send(.parser(.parseData(data)))
             }
             return .none
 
@@ -208,22 +211,20 @@ struct IfstatFeature {
         }
     }
 
-    // MARK: - MQTT Helper Methods
-
-    private func parseIfstatJsonData(_ data: Data) -> Effect<Action> {
-        return .run { send in
-            do {
-                let decoder = JSONDecoder()
-                decoder.dateDecodingStrategy = .secondsSince1970
-
-                let mqttMessage = try decoder.decode(IfstatMqttMessage.self, from: data)
-                logger.info("✅ IfstatFeature: Parsed data value: \(mqttMessage.value)")
-
-                await send(._internal(.interfaceDataUpdated([mqttMessage])))
-            } catch {
-                logger.error("❌ IfstatFeature: JSON parsing failed: \(error)")
-                await send(._internal(.parsingError(error.localizedDescription)))
-            }
+    // MARK: - Parser Delegate Handling
+    
+    private func handleParserDelegate(
+        into state: inout State, action: CodableParserFeature<IfstatMqttMessage>.Action.Delegate) -> Effect<Action>
+    {
+        switch action {
+        case .parsed(let message):
+            logger.info("✅ IfstatFeature: Parsed data value: \(message.value)")
+            return .send(._internal(.interfaceDataUpdated([message])))
+            
+        case .parsingFailed(let error):
+            logger.error("❌ IfstatFeature: Parsing failed: \(error)")
+            state.lastError = error
+            return .none
         }
     }
 }
