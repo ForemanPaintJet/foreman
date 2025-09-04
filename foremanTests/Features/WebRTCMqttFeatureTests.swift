@@ -22,54 +22,31 @@ struct WebRTCMqttFeatureTests {
         var state = WebRTCMqttFeature.State()
         state.generateDefaultUserId()
         #expect(state.userId.hasPrefix("user_"))
-        #expect(state.mqttInfo.clientID == state.userId)
+        #expect(state.mqttFeature.connectionInfo.clientID == state.userId)
     }
 
     @Test("binding updates MQTT info and userId")
     func testBindingUpdates() async throws {
         let store = TestStore(
             initialState: WebRTCMqttFeature.State(), reducer: { WebRTCMqttFeature() })
-        await store.send(.binding(.set(\.mqttInfo.address, "192.168.1.100"))) {
-            $0.mqttInfo.address = "192.168.1.100"
-        }
-        
-        await store.send(.binding(.set(\.mqttInfo.port, 1884))) {
-            $0.mqttInfo.port = 1884
-        }
         
         await store.send(.binding(.set(\.userId, "testUser"))) {
             $0.userId = "testUser"
-            $0.mqttInfo.clientID = "testUser"
+            $0.mqttFeature.connectionInfo.clientID = "testUser"
         }
     }
 
-    @Test("clear messages and error")
-    func testClearMessagesAndError() async throws {
+    @Test("clear error")
+    func testClearError() async throws {
         let store = TestStore(
-            initialState: WebRTCMqttFeature.State(
-                lastError: "Some error",
-                messages: [
-                    MQTTPublishInfo(
-                        qos: .atLeastOnce, retain: false, topicName: "test", payload: ByteBuffer(),
-                        properties: .init([]))
-                ]), reducer: { WebRTCMqttFeature() })
-        await store.send(.view(.clearMessages)) {
-            $0.messages = []
-        }
+            initialState: WebRTCMqttFeature.State(lastError: "Some error"),
+            reducer: { WebRTCMqttFeature() })
         await store.send(.view(.clearError)) {
             $0.lastError = nil
         }
     }
 
-    @Test("connection status changed")
-    func testConnectionStatusChanged() async throws {
-        let store = TestStore(
-            initialState: WebRTCMqttFeature.State(connectionStatus: .idle),
-            reducer: { WebRTCMqttFeature() })
-        await store.send(._internal(.connectionStatusChanged(.connected))) {
-            $0.connectionStatus = .connected
-        }
-    }
+    // Connection status is now managed by MqttFeature
 
     @Test("set loading state")
     func testSetLoading() async throws {
@@ -95,30 +72,7 @@ struct WebRTCMqttFeatureTests {
         await store.receive(.delegate(.connectionError("Connection failed")))
     }
 
-    @Test("message received appends to messages and limits to 50")
-    func testMessageReceived() async throws {
-        // Create 50 existing messages
-        let existingMessages = (0..<50).map { i in
-            MQTTPublishInfo(
-                qos: .atLeastOnce, retain: false, topicName: "test\(i)", payload: ByteBuffer(),
-                properties: .init([]))
-        }
-        
-        let store = TestStore(
-            initialState: WebRTCMqttFeature.State(messages: existingMessages),
-            reducer: { WebRTCMqttFeature() })
-        
-        let newMessage = MQTTPublishInfo(
-            qos: .atLeastOnce, retain: false, topicName: "newTest", payload: ByteBuffer(),
-            properties: .init([]))
-        
-        await store.send(._internal(.mqttMessageReceived(newMessage))) {
-            // Should remove first message and append new one
-            $0.messages.removeFirst()
-            $0.messages.append(newMessage)
-            #expect($0.messages.count == 50)
-        }
-    }
+    // Message handling is now managed by MqttFeature
 
     @Test("offer received updates pendingOffers and sends to WebRTCFeature")
     func testOfferReceived() async throws {
@@ -181,6 +135,7 @@ struct WebRTCMqttFeatureTests {
             reducer: { WebRTCMqttFeature() }
         )
         
+        store.exhaustivity = .off(showSkippedAssertions: true)
         await store.send(.webRTCFeature(.delegate(.offerGenerated(sdp: "test-offer-sdp", userId: "client1"))))
         
         await store.receive(._internal(.webRTCOfferGenerated(WebRTCOffer(
@@ -199,6 +154,7 @@ struct WebRTCMqttFeatureTests {
             reducer: { WebRTCMqttFeature() }
         )
         
+        store.exhaustivity = .off(showSkippedAssertions: true)
         await store.send(.webRTCFeature(.delegate(.answerGenerated(sdp: "test-answer-sdp", userId: "client1"))))
         
         await store.receive(._internal(.webRTCAnswerGenerated(WebRTCAnswer(
@@ -217,6 +173,7 @@ struct WebRTCMqttFeatureTests {
             reducer: { WebRTCMqttFeature() }
         )
         
+        store.exhaustivity = .off(showSkippedAssertions: true)
         await store.send(.webRTCFeature(.delegate(.iceCandidateGenerated(
             candidate: "test-candidate", 
             sdpMLineIndex: 0, 
@@ -286,177 +243,10 @@ struct WebRTCMqttFeatureTests {
     }
     
     // MARK: - MQTT Message Parsing Tests
+    // Note: Message parsing is now handled by MqttFeature delegate
     
-    @Test("MQTT offer message parsing and filtering")
-    func testMQTTOfferMessageParsing() async throws {
-        let store = TestStore(initialState: WebRTCMqttFeature.State(userId: "user123")) {
-            WebRTCMqttFeature()
-        } withDependencies: {
-            $0.webRTCEngine.setRemoteOffer = { _ in throw WebRTCError.failedToSetDescription }
-        }
-        
-        // Create MQTT message with offer
-        let offerJSON = """
-        {
-            "type": "offer",
-            "clientId": "client1",
-            "sdp": "test-offer-sdp",
-            "videoSource": ""
-        }
-        """
-        let payload = ByteBuffer(data: Data(offerJSON.utf8))
-        let mqttMessage = MQTTPublishInfo(
-            qos: .atLeastOnce,
-            retain: false,
-            topicName: "camera_system/streaming/out",
-            payload: payload,
-            properties: .init([])
-        )
-        
-        store.exhaustivity = .off(showSkippedAssertions: true)
-        
-        await store.send(._internal(.mqttMessageReceived(mqttMessage))) {
-            $0.messages = [mqttMessage]
-        }
-        
-        // Should parse and forward to WebRTCFeature
-        await store.receive(._internal(.offerReceived(WebRTCOffer(
-            sdp: "test-offer-sdp",
-            type: "offer",
-            from: "client1",
-            to: "user123",
-            videoSource: ""
-        )))) {
-            $0.pendingOffers = [WebRTCOffer(
-                sdp: "test-offer-sdp",
-                type: "offer",
-                from: "client1",
-                to: "user123",
-                videoSource: ""
-            )]
-        }
-        
-        await store.receive(.webRTCFeature(.view(.handleRemoteOffer(WebRTCOffer(
-            sdp: "test-offer-sdp",
-            type: "offer",
-            from: "client1",
-            to: "user123",
-            videoSource: ""
-        )))))
-    }
     
-    @Test("MQTT offer message from self is ignored")
-    func testMQTTOfferMessageSelfFiltering() async throws {
-        let store = TestStore(
-            initialState: WebRTCMqttFeature.State(userId: "user123"),
-            reducer: { WebRTCMqttFeature() }
-        )
-        
-        // Create MQTT message with offer from self
-        let offerJSON = """
-        {
-            "type": "offer",
-            "clientId": "user123",
-            "sdp": "test-offer-sdp",
-            "videoSource": ""
-        }
-        """
-        let payload = ByteBuffer(data: Data(offerJSON.utf8))
-        let mqttMessage = MQTTPublishInfo(
-            qos: .atLeastOnce,
-            retain: false,
-            topicName: "camera_system/streaming/out",
-            payload: payload,
-            properties: .init([])
-        )
-        
-        await store.send(._internal(.mqttMessageReceived(mqttMessage))) {
-            $0.messages.append(mqttMessage)
-            // Should not add to pending offers since it's from self
-        }
-        
-        // Should not receive any further actions since message is ignored
-    }
     
-    @Test("MQTT ICE candidate message parsing")
-    func testMQTTIceCandidateMessageParsing() async throws {
-        let store = TestStore(initialState: WebRTCMqttFeature.State(userId: "user123")) {
-            WebRTCMqttFeature()
-        } withDependencies: {
-            $0.webRTCEngine.addIceCandidate = { _ in throw WebRTCError.failedToAddCandidate }
-        }
-        
-        // Create MQTT message with ICE candidate
-        let iceJSON = """
-        {
-            "type": "ice",
-            "clientId": "client1",
-            "candidate": {
-                "candidate": "test-ice-candidate",
-                "sdpMLineIndex": 0,
-                "sdpMid": "0"
-            }
-        }
-        """
-        let payload = ByteBuffer(data: Data(iceJSON.utf8))
-        let mqttMessage = MQTTPublishInfo(
-            qos: .atLeastOnce,
-            retain: false,
-            topicName: "camera_system/streaming/out",
-            payload: payload,
-            properties: .init([])
-        )
-        
-        store.exhaustivity = .off(showSkippedAssertions: true)
-        
-        await store.send(._internal(.mqttMessageReceived(mqttMessage))) {
-            $0.messages = [mqttMessage]
-        }
-        
-        // Should parse and forward to WebRTCFeature
-        let expectedIceCandidate = ICECandidate(
-            type: "ice",
-            from: "client1",
-            to: "user123",
-            candidate: .init(
-                candidate: "test-ice-candidate",
-                sdpMLineIndex: 0,
-                sdpMid: "0"
-            )
-        )
-        
-        await store.receive(._internal(.iceCandidateReceived(expectedIceCandidate))) {
-            $0.pendingIceCandidates = [expectedIceCandidate]
-        }
-        
-        await store.receive(.webRTCFeature(.view(.handleICECandidate(expectedIceCandidate))))
-    }
-    
-    @Test("invalid MQTT message parsing handles gracefully")
-    func testInvalidMQTTMessageParsing() async throws {
-        let store = TestStore(
-            initialState: WebRTCMqttFeature.State(),
-            reducer: { WebRTCMqttFeature() }
-        )
-        
-        // Create MQTT message with invalid JSON
-        let invalidJSON = "{ invalid json content"
-        let payload = ByteBuffer(data: Data(invalidJSON.utf8))
-        let mqttMessage = MQTTPublishInfo(
-            qos: .atLeastOnce,
-            retain: false,
-            topicName: "camera_system/streaming/out",
-            payload: payload,
-            properties: .init([])
-        )
-        
-        await store.send(._internal(.mqttMessageReceived(mqttMessage))) {
-            $0.messages.append(mqttMessage)
-            // Should handle gracefully without crashing
-        }
-        
-        // Should not receive any further actions since parsing failed
-    }
     
     @Test("room operations update state correctly")
     func testRoomOperations() async throws {

@@ -24,8 +24,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/Paintjed/MqttClientKit",
       "state" : {
-        "branch" : "main",
-        "revision" : "403227bd9bb35cae697ce2d1792a3fd2283f082e"
+        "branch" : "refactorTCAPatterns",
+        "revision" : "bbce978b6d1aa90b9c1252d4d30e9bff1127fde8"
       }
     },
     {
