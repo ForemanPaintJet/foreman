@@ -5,6 +5,7 @@
 //  Created by Claude on 2025/8/28.
 //
 
+import DequeModule
 import ComposableArchitecture
 import Foundation
 import MqttClientKit
@@ -26,9 +27,12 @@ struct IfstatMqttMessage: Codable, Equatable {
 struct IfstatFeature {
     @ObservableState
     struct State: Equatable {
-        var interfaceData: [IfstatMqttMessage] = []
-        var topicName: String = ifstatOutputTopic // MQTT topic name used as view name
+        var interfaceData: Deque<IfstatMqttMessage> = []
+        var topicName: String = ""
+        var displayName: String? = nil
+        var unit: String = ""
         var timeRange: TimeInterval = 300 // 5 minutes default
+        var windowSize: Int = 10 // Number of recent data points to keep in sliding window
         var lastRefreshTime: Date = .init()
         var lastError: String?
 
@@ -39,7 +43,7 @@ struct IfstatFeature {
         var parser: CodableParserFeature<IfstatMqttMessage>.State = .init()
 
         var latestData: IfstatMqttMessage? {
-            interfaceData.first
+            interfaceData.last
         }
     }
 
@@ -57,6 +61,7 @@ struct IfstatFeature {
             case task
             case teardown
             case changeTimeRange(TimeInterval)
+            case changeWindowSize(Int)
             case clearError
         }
 
@@ -122,12 +127,13 @@ struct IfstatFeature {
     > {
         switch action {
         case .task:
-            logger.info("🔄 IfstatFeature: Starting realtime ifstat monitoring")
-            // Subscribe to ifstat output topic with realtime updates
+            let topicName = state.topicName
+            logger.info("🔄 IfstatFeature: Starting realtime monitoring for topic: \(topicName)")
+            // Subscribe to the configured topic with realtime updates
             return .run { send in
                 await send(.mqttSubscriber(.view(.task)))
                 await send(.mqttSubscriber(.view(.subscribe(
-                    MQTTSubscribeInfo(topicFilter: ifstatOutputTopic, qos: .atLeastOnce)
+                    MQTTSubscribeInfo(topicFilter: topicName, qos: .atLeastOnce)
                 ))))
             }
 
@@ -140,7 +146,15 @@ struct IfstatFeature {
             state.timeRange = newRange
             // Filter data based on new time range
             let cutoffTime = Date().addingTimeInterval(-newRange)
-            state.interfaceData = state.interfaceData.filter { $0.timestamp >= cutoffTime }
+            state.interfaceData = Deque(state.interfaceData.filter { $0.timestamp >= cutoffTime })
+            return .none
+
+        case .changeWindowSize(let newSize):
+            state.windowSize = max(1, newSize) // Ensure window size is at least 1
+            // Trim data to new window size using Deque's efficient operations
+            while state.interfaceData.count > state.windowSize {
+                state.interfaceData.removeFirst()
+            }
             return .none
 
         case .clearError:
@@ -155,12 +169,8 @@ struct IfstatFeature {
         @Dependency(\.date) var date
         switch action {
         case .interfaceDataUpdated(let newData):
-            state.interfaceData = mergeInterfaceData(existing: state.interfaceData, new: newData)
+            state.interfaceData = mergeInterfaceData(existing: state.interfaceData, new: newData, windowSize: state.windowSize)
             state.lastRefreshTime = date.now
-
-            // Keep only data within current time range for realtime performance
-            let cutoffTime = Date().addingTimeInterval(-state.timeRange)
-            state.interfaceData = state.interfaceData.filter { $0.timestamp >= cutoffTime }
 
             return .send(.delegate(.dataUpdated))
 
@@ -170,15 +180,22 @@ struct IfstatFeature {
         }
     }
 
-    private func mergeInterfaceData(existing: [IfstatMqttMessage], new: [IfstatMqttMessage])
-        -> [IfstatMqttMessage]
+    private func mergeInterfaceData(existing: Deque<IfstatMqttMessage>, new: [IfstatMqttMessage], windowSize: Int)
+        -> Deque<IfstatMqttMessage>
     {
-        // For realtime performance, keep more recent data and limit total points
-        let maxDataPoints = 200 // Increased for better chart resolution
-        let combined = existing + new
-
-        // Sort by timestamp (newest first) and take only recent data points
-        return Array(combined.sorted { $0.timestamp > $1.timestamp }.prefix(maxDataPoints))
+        var result = existing
+        
+        // Append new data with O(1) performance
+        for message in new {
+            result.append(message)
+            
+            // Remove old data to maintain sliding window size with O(1) performance
+            if result.count > windowSize {
+                result.removeFirst()
+            }
+        }
+        
+        return result
     }
 
     // MARK: - MQTT Subscriber Delegate Handling
@@ -188,10 +205,10 @@ struct IfstatFeature {
     {
         switch action {
         case .messageReceived(let message):
-            guard message.topicName == ifstatOutputTopic else {
+            guard message.topicName == state.topicName else {
                 return .none
             }
-            logger.info("📥 IfstatFeature: Received ifstat message")
+            logger.info("📥 IfstatFeature: Received message for topic: \(message.topicName)")
             if let data = message.payload.getData(at: 0, length: message.payload.readableBytes) {
                 return .send(.parser(.parseData(data)))
             }

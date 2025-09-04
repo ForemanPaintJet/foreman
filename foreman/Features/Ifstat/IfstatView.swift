@@ -39,7 +39,7 @@ struct IfstatView: View {
         }
         .padding()
       }
-      .navigationTitle("\(store.topicName) 監控")
+      .navigationTitle("\(store.topicName) Monitoring")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .navigationBarTrailing) {
@@ -61,7 +61,7 @@ struct IfstatView: View {
     VStack(spacing: 8) {
       HStack {
         VStack(alignment: .leading, spacing: 4) {
-          Text("MQTT 數據監控")
+          Text("MQTT Data Monitoring")
             .font(.title2)
             .fontWeight(.bold)
           
@@ -75,7 +75,7 @@ struct IfstatView: View {
         VStack(alignment: .trailing, spacing: 4) {
           dataSourceIndicator
           
-          Text("更新：\(formatRelativeTime(store.lastRefreshTime))")
+          Text("Updated: \(formatRelativeTime(store.lastRefreshTime))")
             .font(.caption)
             .foregroundColor(.secondary)
         }
@@ -98,57 +98,83 @@ struct IfstatView: View {
           value: hasData
         )
       
-      Text("即時資料")
+      Text("Real-time Data")
         .font(.caption)
         .foregroundColor(.blue)
     }
   }
   
   @ViewBuilder
-  private var dataVisualizationCard: some View {
-    VStack(spacing: 16) {
-      // Current value display
+  private var chartHeaderView: some View {
+    HStack(alignment: .top) {
+      VStack(alignment: .leading, spacing: 4) {
+        Text(sensorDisplayName)
+          .font(.headline)
+          .fontWeight(.semibold)
+          .foregroundColor(.primary)
+        
+        Text("Network Interface Monitoring")
+          .font(.subheadline)
+          .foregroundColor(.secondary)
+      }
+      
+      Spacer()
+      
       if let latestData = store.latestData {
-        HStack {
-          VStack(alignment: .leading, spacing: 4) {
-            Text("當前數值")
-              .font(.headline)
-              .foregroundColor(.secondary)
-            
+        VStack(alignment: .trailing, spacing: 4) {
+          HStack(alignment: .firstTextBaseline, spacing: 4) {
             Text("\(latestData.value)")
-              .font(.largeTitle.bold())
+              .font(.title.bold())
               .foregroundColor(.primary)
+            
+            Text(sensorUnit)
+              .font(.caption)
+              .foregroundColor(.secondary)
           }
-          
-          Spacer()
           
           Text("\(latestData.timestamp, format: .dateTime.hour().minute().second())")
             .font(.caption)
             .foregroundColor(.secondary)
         }
-        .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(12)
       }
-      
-      // Chart
-      VStack(alignment: .leading, spacing: 8) {
-        Text("數值趨勢")
-          .font(.headline)
-          .foregroundColor(.primary)
+    }
+  }
+  
+  private var sensorDisplayName: String {
+    if let displayName = store.displayName {
+      return displayName
+    }
+    // Extract a friendly name from topic as fallback
+    let components = store.topicName.components(separatedBy: "/")
+    if components.count >= 2 {
+      return components[1].capitalized + " Data"
+    }
+    return store.topicName
+  }
+  
+  private var sensorUnit: String {
+    return store.unit
+  }
+  
+  @ViewBuilder
+  private var dataVisualizationCard: some View {
+    VStack(spacing: 16) {
+      // Chart with integrated header
+      VStack(alignment: .leading, spacing: 12) {
+        chartHeaderView
         
         Chart(store.interfaceData, id: \.timestamp) { data in
           LineMark(
-            x: .value("時間", data.timestamp),
-            y: .value("數值", data.value)
+            x: .value("Time", data.timestamp),
+            y: .value("Value", data.value)
           )
           .foregroundStyle(.blue)
           .symbol(.circle)
           .symbolSize(30)
           
           AreaMark(
-            x: .value("時間", data.timestamp),
-            y: .value("數值", data.value)
+            x: .value("Time", data.timestamp),
+            y: .value("Value", data.value)
           )
           .foregroundStyle(.blue.opacity(0.1))
         }
@@ -193,17 +219,17 @@ struct IfstatView: View {
         .foregroundColor(.secondary)
       
       VStack(spacing: 8) {
-        Text("無 MQTT 數據")
+        Text("No MQTT Data")
           .font(.title2)
           .fontWeight(.medium)
         
-        Text("請檢查 MQTT 連線是否正常...")
+        Text("Please check MQTT connection...")
           .font(.subheadline)
           .foregroundColor(.secondary)
           .multilineTextAlignment(.center)
       }
       
-      Text("等待數據中")
+      Text("Waiting for data")
         .foregroundColor(.secondary)
     }
     .frame(maxWidth: .infinity)
@@ -213,15 +239,38 @@ struct IfstatView: View {
   @ViewBuilder
   private var controlMenu: some View {
     Menu {
-      Section("時間範圍") {
-        timeRangeButton(name: "1 分鐘", value: 60)
-        timeRangeButton(name: "5 分鐘", value: 300)
-        timeRangeButton(name: "15 分鐘", value: 900)
-        timeRangeButton(name: "30 分鐘", value: 1800)
+      Section("Data Points") {
+        windowSizeButton(name: "5 points", value: 5)
+        windowSizeButton(name: "10 points", value: 10)
+        windowSizeButton(name: "20 points", value: 20)
+        windowSizeButton(name: "50 points", value: 50)
+        windowSizeButton(name: "100 points", value: 100)
+      }
+      
+      Section("Time Range") {
+        timeRangeButton(name: "1 minute", value: 60)
+        timeRangeButton(name: "5 minutes", value: 300)
+        timeRangeButton(name: "15 minutes", value: 900)
+        timeRangeButton(name: "30 minutes", value: 1800)
       }
     } label: {
       Image(systemName: "slider.horizontal.3")
         .foregroundColor(.blue)
+    }
+  }
+  
+  @ViewBuilder
+  private func windowSizeButton(name: String, value: Int) -> some View {
+    Button(action: {
+      send(.changeWindowSize(value))
+    }) {
+      Label {
+        Text(name)
+      } icon: {
+        if store.windowSize == value {
+          Image(systemName: "checkmark")
+        }
+      }
     }
   }
   
@@ -248,7 +297,7 @@ struct IfstatView: View {
         .font(.system(size: 16, weight: .medium))
       
       VStack(alignment: .leading, spacing: 2) {
-        Text("解析錯誤")
+        Text("Parse Error")
           .font(.headline)
           .foregroundColor(.white)
         
@@ -280,9 +329,9 @@ struct IfstatView: View {
     let interval = Date().timeIntervalSince(date)
     
     if interval < 60 {
-      return "\(Int(interval))秒前"
+      return "\(Int(interval))s ago"
     } else if interval < 3600 {
-      return "\(Int(interval / 60))分前"
+      return "\(Int(interval / 60))m ago"
     } else {
       return date.formatted(date: .omitted, time: .shortened)
     }
@@ -293,7 +342,9 @@ struct IfstatView: View {
   IfstatView(
     store: .init(
       initialState: IfstatFeature.State(
-        topicName: ifstatOutputTopic
+        topicName: ifstatOutputTopic,
+        displayName: "Network Speed",
+        unit: "bytes/s"
       ),
       reducer: {
         IfstatFeature()

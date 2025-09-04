@@ -125,7 +125,10 @@ struct WebRTCMqttFeature {
         var directVideoCall: DirectVideoCallFeature.State = DirectVideoCallFeature.State()
         var webRTCFeature: WebRTCFeature.State = WebRTCFeature.State()
         var deviceStats: DeviceStatsFeature.State = DeviceStatsFeature.State()
-        var ifstat: IfstatFeature.State = IfstatFeature.State()
+        var ifstat: IfstatFeature.State = IfstatFeature.State(
+          topicName: "network/ifstat/data",
+          unit: "MB/s"
+      )
         var logoRotationAngle: Double = 90.0
         var showDeviceStats: Bool = false
         var showIfstat: Bool = false

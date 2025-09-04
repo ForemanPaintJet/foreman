@@ -15,19 +15,28 @@ import XCTest
 final class IfstatFeatureTests: XCTestCase {
   func testInitialState() async {
     let store = TestStore(
-      initialState: IfstatFeature.State(),
+      initialState: IfstatFeature.State(
+        topicName: "test/topic",
+        displayName: "Test Sensor",
+        unit: "test-unit"
+      ),
       reducer: { IfstatFeature() }
     )
     
     expectNoDifference(store.state.interfaceData, [])
     expectNoDifference(store.state.timeRange, 300) // 5 minutes
     expectNoDifference(store.state.lastError, nil)
-    expectNoDifference(store.state.topicName, ifstatOutputTopic)
+    expectNoDifference(store.state.topicName, "test/topic")
+    expectNoDifference(store.state.displayName, "Test Sensor")
+    expectNoDifference(store.state.unit, "test-unit")
   }
   
   func testTaskAction() async {
     let store = TestStore(
-      initialState: IfstatFeature.State(),
+      initialState: IfstatFeature.State(
+        topicName: "test/topic",
+        unit: "test-unit"
+      ),
       reducer: { IfstatFeature() }
     )
     
@@ -41,9 +50,14 @@ final class IfstatFeatureTests: XCTestCase {
   func testChangeTimeRange() async {
     let mockData = IfstatMqttMessage(value: 100, timestamp: Date().addingTimeInterval(-3600))
     let store = TestStore(
-      initialState: IfstatFeature.State(interfaceData: [mockData]),
+      initialState: IfstatFeature.State(
+        interfaceData: [mockData],
+        topicName: "test/topic",
+        unit: "test-unit"
+      ),
       reducer: { IfstatFeature() }
     )
+    
     
     await store.send(.view(.changeTimeRange(900))) {
       $0.timeRange = 900 // 15 minutes
@@ -54,7 +68,11 @@ final class IfstatFeatureTests: XCTestCase {
   
   func testClearError() async {
     let store = TestStore(
-      initialState: IfstatFeature.State(lastError: "Test error"),
+      initialState: IfstatFeature.State(
+        topicName: "test/topic",
+        unit: "test-unit",
+        lastError: "Test error"
+      ),
       reducer: { IfstatFeature() }
     )
     
@@ -65,7 +83,10 @@ final class IfstatFeatureTests: XCTestCase {
   
   func testParsingError() async {
     let store = TestStore(
-      initialState: IfstatFeature.State(),
+      initialState: IfstatFeature.State(
+        topicName: "test/topic",
+        unit: "test-unit"
+      ),
       reducer: { IfstatFeature() }
     )
     
@@ -78,7 +99,12 @@ final class IfstatFeatureTests: XCTestCase {
   func testParseIfstatDataSuccess() async {
     let fixedDate = Date(timeIntervalSince1970: 1_726_000_000)
     
-    let store = TestStore(initialState: IfstatFeature.State()) {
+    let store = TestStore(
+      initialState: IfstatFeature.State(
+        topicName: "test/topic",
+        unit: "test-unit"
+      )
+    ) {
       IfstatFeature()
     } withDependencies: {
       $0.date = .init({
@@ -108,7 +134,10 @@ final class IfstatFeatureTests: XCTestCase {
   
   func testParseIfstatDataFailure() async {
     let store = TestStore(
-      initialState: IfstatFeature.State(),
+      initialState: IfstatFeature.State(
+        topicName: "test/topic",
+        unit: "test-unit"
+      ),
       reducer: { IfstatFeature() }
     )
     
@@ -123,26 +152,73 @@ final class IfstatFeatureTests: XCTestCase {
     }
   }
   
-  func testInterfaceDataUpdated() async {
+  func testCustomInitialization() async {
+    let store = TestStore(
+      initialState: IfstatFeature.State(
+        topicName: "network/custom/data",
+        displayName: "Custom Network Monitor",
+        unit: "MB/s"
+      ),
+      reducer: { IfstatFeature() }
+    )
+    
+    expectNoDifference(store.state.displayName, "Custom Network Monitor")
+    expectNoDifference(store.state.topicName, "network/custom/data")
+    expectNoDifference(store.state.unit, "MB/s")
+  }
+  
+  func testAutoDisplayName() async {
+    let store = TestStore(
+      initialState: IfstatFeature.State(
+        topicName: "sensor/temperature",
+        displayName: nil,
+        unit: "°C"
+      ),
+      reducer: { IfstatFeature() }
+    )
+    
+    expectNoDifference(store.state.displayName, nil)
+    expectNoDifference(store.state.topicName, "sensor/temperature")
+    expectNoDifference(store.state.unit, "°C")
+  }
+  
+  func testLatestDataProperty() async {
     let fixedDate = Date(timeIntervalSince1970: 1_726_000_000)
     
-    let store = TestStore(initialState: IfstatFeature.State()) {
+    let store = TestStore(
+      initialState: IfstatFeature.State(
+        topicName: "test/topic",
+        unit: "test-unit"
+      )
+    ) {
       IfstatFeature()
     } withDependencies: {
-      $0.date = .init({
-        fixedDate
-      })
+      $0.date = .init({ fixedDate })
     }
     
-    store.exhaustivity = .off(showSkippedAssertions: true)
+    // Initially no data
+    expectNoDifference(store.state.latestData, nil)
     
-    let newData = [IfstatMqttMessage(value: 100, timestamp: Date())]
-    
-    await store.send(._internal(.interfaceDataUpdated(newData))) { state in
-      state.interfaceData = newData
+    // Add first data point through internal action
+    let firstData = IfstatMqttMessage(value: 100, timestamp: Date().addingTimeInterval(-60))
+    await store.send(._internal(.interfaceDataUpdated([firstData]))) { state in
+      state.interfaceData = [firstData]
       state.lastRefreshTime = fixedDate
     }
-    
     await store.receive(\.delegate.dataUpdated)
+    
+    // Verify latest data is the first one
+    expectNoDifference(store.state.latestData, firstData)
+    
+    // Add second data point - should become the latest
+    let secondData = IfstatMqttMessage(value: 200, timestamp: Date())
+    await store.send(._internal(.interfaceDataUpdated([secondData]))) { state in
+      state.interfaceData = [firstData, secondData]
+      state.lastRefreshTime = fixedDate
+    }
+    await store.receive(\.delegate.dataUpdated)
+    
+    // Verify latest data is now the second one (last in queue)
+    expectNoDifference(store.state.latestData, secondData)
   }
 }
