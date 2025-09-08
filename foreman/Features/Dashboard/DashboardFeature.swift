@@ -7,6 +7,7 @@
 
 import ComposableArchitecture
 import OSLog
+import Dependencies
 
 @Reducer
 struct DashboardFeature {
@@ -63,6 +64,12 @@ struct DashboardFeature {
     
     // Mini mode state
     var isMiniMode: Bool = true
+    
+    // Info popover state
+    var showInfoPopover: Bool = false
+    
+    // Current running gesture state (defaults to idle)
+    var currentRunningGesture: GestureType = .idle
   }
   
   @CasePathable
@@ -87,11 +94,14 @@ struct DashboardFeature {
       case setCompactLayout(Bool)
       case toggleMiniMode
       case setMiniMode(Bool)
+      case showInfo(Bool)
+      case setRunningGesture(GestureType)
     }
     
     @CasePathable
     enum InternalAction: Equatable {
       case updateDrawerState
+      case resetToIdle
     }
     
     @CasePathable
@@ -189,6 +199,27 @@ struct DashboardFeature {
         .send(.sensorNodeStatus(.view(.setMiniMode(isMini))))
       ])
       
+    case .view(.showInfo(let show)):
+      state.showInfoPopover = show
+      return .none
+      
+    case .view(.setRunningGesture(let gesture)):
+      state.currentRunningGesture = gesture
+      logger.info("🤚 DashboardFeature: Gesture set to \(gesture.displayName)")
+      
+      // Auto-reset to idle after 3 seconds if not idle
+      if gesture != .idle {
+        return .run { send in
+          @Dependency(\.continuousClock) var clock
+          try await clock.sleep(for: .seconds(3))
+          await send(._internal(.resetToIdle))
+        }
+        .cancellable(id: "gestureTimer")
+      } else {
+        // Cancel any existing timer if manually set to idle
+        return .cancel(id: "gestureTimer")
+      }
+      
     case .view(.teardown):
       // Teardown all child monitoring features
       let teardownEffects = state.monitoringItems.ids.map { id in
@@ -200,6 +231,11 @@ struct DashboardFeature {
       ])
       
     case ._internal(.updateDrawerState):
+      return .none
+      
+    case ._internal(.resetToIdle):
+      logger.info("🤚 DashboardFeature: Auto-resetting gesture to idle")
+      state.currentRunningGesture = .idle
       return .none
       
     case .delegate:

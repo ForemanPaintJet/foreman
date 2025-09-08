@@ -8,6 +8,7 @@
 import ComposableArchitecture
 import MqttClientKit
 import XCTest
+import Dependencies
 
 @testable import foreman
 
@@ -260,5 +261,92 @@ final class DashboardFeatureTests: XCTestCase {
       expectNoDifference(item.isMiniMode, true)
     }
     expectNoDifference(store.state.sensorNodeStatus.isMiniMode, true)
+  }
+  
+  func testGestureSelectionAndAutoReset() async {
+    let clock = TestClock()
+    
+    let store = TestStore(
+      initialState: DashboardFeature.State(currentRunningGesture: .idle),
+      reducer: { DashboardFeature() }
+    ) {
+      $0.continuousClock = clock
+    }
+    
+    // Test setting a gesture (not idle)
+    await store.send(.view(.setRunningGesture(.emergencyStop))) {
+      $0.currentRunningGesture = .emergencyStop
+    }
+    
+    // Advance time by 2 seconds - should not reset yet
+    await clock.advance(by: .seconds(2))
+    
+    // Advance time by 1 more second (total 3 seconds) - should auto-reset
+    await clock.advance(by: .seconds(1))
+    
+    await store.receive(._internal(.resetToIdle)) {
+      $0.currentRunningGesture = .idle
+    }
+  }
+  
+  func testGestureSelectionCancelsTimer() async {
+    let clock = TestClock()
+    
+    let store = TestStore(
+      initialState: DashboardFeature.State(currentRunningGesture: .idle),
+      reducer: { DashboardFeature() }
+    ) {
+      $0.continuousClock = clock
+    }
+    
+    // Set first gesture
+    await store.send(.view(.setRunningGesture(.emergencyStop))) {
+      $0.currentRunningGesture = .emergencyStop
+    }
+    
+    // Advance time by 2 seconds
+    await clock.advance(by: .seconds(2))
+    
+    // Set another gesture - should cancel previous timer and start new one
+    await store.send(.view(.setRunningGesture(.followMe))) {
+      $0.currentRunningGesture = .followMe
+    }
+    
+    // Advance by 2 more seconds (4 total, but only 2 since last gesture)
+    await clock.advance(by: .seconds(2))
+    
+    // Should not reset yet, advance 1 more second (3 since last gesture)
+    await clock.advance(by: .seconds(1))
+    
+    await store.receive(._internal(.resetToIdle)) {
+      $0.currentRunningGesture = .idle
+    }
+  }
+  
+  func testSettingIdleGestureCancelsTimer() async {
+    let clock = TestClock()
+    
+    let store = TestStore(
+      initialState: DashboardFeature.State(currentRunningGesture: .idle),
+      reducer: { DashboardFeature() }
+    ) {
+      $0.continuousClock = clock
+    }
+    
+    // Set non-idle gesture
+    await store.send(.view(.setRunningGesture(.stop))) {
+      $0.currentRunningGesture = .stop
+    }
+    
+    // Advance time by 1 second
+    await clock.advance(by: .seconds(1))
+    
+    // Manually set to idle - should cancel timer
+    await store.send(.view(.setRunningGesture(.idle))) {
+      $0.currentRunningGesture = .idle
+    }
+    
+    // Advance time by 5 seconds - should not receive any reset action
+    await clock.advance(by: .seconds(5))
   }
 }
