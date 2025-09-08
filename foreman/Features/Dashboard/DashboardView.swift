@@ -26,7 +26,10 @@ struct DashboardView: View {
           // Top drawer for monitoring panels (floating overlay)
           if store.isDrawerOpen {
             monitoringDrawer
-              .frame(height: store.isMiniMode ? 80 : 400)
+              .containerRelativeFrame(.vertical) { length, axis in
+                // 根據螢幕高度動態調整 drawer 高度
+                return store.isMiniMode ? min(80, length * 0.15) : min(300, length * 0.6)
+              }
               .transition(.move(edge: .top).combined(with: .opacity))
           }
         }
@@ -36,7 +39,10 @@ struct DashboardView: View {
             // Dynamic top spacing based on drawer state
             if store.isDrawerOpen {
               Spacer()
-                .frame(height: store.isMiniMode ? 80 : 400)
+                .containerRelativeFrame(.vertical) { length, axis in
+                  // 對應 drawer 的動態高度
+                  return store.isMiniMode ? min(80, length * 0.15) : min(300, length * 0.6)
+                }
             }
             
             HStack {
@@ -126,11 +132,6 @@ struct DashboardView: View {
         if store.isMiniMode {
           ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 12) {
-              // 動態生成所有 ifstat 監控項目
-              ForEach(store.scope(state: \.monitoringItems, action: \.monitoringItems)) { itemStore in
-                IfstatView(store: itemStore)
-              }
-              
               // Sensor Status
               SensorNodeStatusView(
                 store: store.scope(
@@ -138,19 +139,27 @@ struct DashboardView: View {
                   action: \.sensorNodeStatus
                 )
               )
+              .containerRelativeFrame(.horizontal) { length, axis in
+                // 響應式調整 sensor 狀態視圖寬度
+                return min(300, max(200, length * 0.3))
+              }
+              
+              // 動態生成所有 ifstat 監控項目
+              ForEach(store.scope(state: \.monitoringItems, action: \.monitoringItems)) { itemStore in
+                IfstatView(store: itemStore)
+                  .containerRelativeFrame(.horizontal) { length, axis in
+                    // 根據可用寬度調整監控項目寬度
+                    return store.isMiniMode ? 200 : min(300, length * 0.25)
+                  }
+              }
             }
             .padding(.horizontal)
           }
+          .frame(maxHeight: .infinity)
           .transition(.scale.combined(with: .opacity))
         } else {
           ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 16) {
-              // 動態生成所有 full-size 監控項目
-              ForEach(store.scope(state: \.monitoringItems, action: \.monitoringItems)) { itemStore in
-                IfstatView(store: itemStore)
-                  .frame(width: 300)
-              }
-              
               // Sensor Status
               SensorNodeStatusView(
                 store: store.scope(
@@ -158,14 +167,27 @@ struct DashboardView: View {
                   action: \.sensorNodeStatus
                 )
               )
-              .frame(width: 300)
+              .containerRelativeFrame(.horizontal) { length, axis in
+                // 響應式調整 sensor 狀態視圖寬度
+                return min(300, max(200, length * 0.3))
+              }
+              
+              // 動態生成所有 full-size 監控項目
+              ForEach(store.scope(state: \.monitoringItems, action: \.monitoringItems)) { itemStore in
+                IfstatView(store: itemStore)
+                  .containerRelativeFrame(.horizontal) { length, axis in
+                    // 根據可用寬度調整監控項目寬度
+                    return store.isMiniMode ? 200 : min(300, length * 0.25)
+                  }
+              }
             }
             .padding(.horizontal)
           }
+          .frame(maxHeight: .infinity)
           .transition(.scale.combined(with: .opacity))
         }
       }
-      .frame(maxWidth: .infinity)
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
       
       // Resize handle
       Rectangle()
