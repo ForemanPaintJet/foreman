@@ -21,6 +21,53 @@ struct SensorNodeStatusView: View {
   }
   
   var body: some View {
+    if store.isMiniMode {
+      miniView
+    } else {
+      fullView
+    }
+  }
+  
+  @ViewBuilder
+  private var miniView: some View {
+    if hasData {
+      HStack(spacing: 8) {
+        ForEach(store.sensorNodes, id: \.name) { sensor in
+          VStack(spacing: 4) {
+            statusIndicator(for: sensor.status)
+              .scaleEffect(0.8)
+            
+            Text(formatCompactSensorName(sensor.name))
+              .font(.caption2)
+              .foregroundColor(.primary)
+              .lineLimit(1)
+              .minimumScaleFactor(0.8)
+          }
+        }
+      }
+      .padding(8)
+      .background(Color(.systemBackground))
+      .cornerRadius(8)
+      .shadow(radius: 1)
+    } else {
+      HStack(spacing: 6) {
+        Circle()
+          .fill(.gray.opacity(0.3))
+          .frame(width: 16, height: 16)
+        
+        Text("No Sensors")
+          .font(.caption2)
+          .foregroundColor(.secondary)
+      }
+      .padding(8)
+      .background(Color(.systemBackground))
+      .cornerRadius(8)
+      .shadow(radius: 1)
+    }
+  }
+  
+  @ViewBuilder
+  private var fullView: some View {
     NavigationView {
       ScrollView {
         VStack(spacing: 20) {
@@ -28,7 +75,7 @@ struct SensorNodeStatusView: View {
             errorBanner(error: error)
           }
           
-          headerView
+//          headerView
           
           if hasData {
             sensorStatusGrid
@@ -42,12 +89,12 @@ struct SensorNodeStatusView: View {
       .navigationBarTitleDisplayMode(.inline)
     }
     .navigationViewStyle(.stack)
-    .task {
-      send(.task)
-    }
-    .onDisappear {
-      send(.teardown)
-    }
+  }
+  
+  private func formatCompactSensorName(_ name: String) -> String {
+    let components = name.replacingOccurrences(of: "_sensor_node", with: "")
+      .components(separatedBy: "_")
+    return components.first?.capitalized ?? name
   }
   
   @ViewBuilder
@@ -102,16 +149,31 @@ struct SensorNodeStatusView: View {
   
   @ViewBuilder
   private var sensorStatusGrid: some View {
-    LazyVGrid(columns: [
-      GridItem(.flexible()),
-      GridItem(.flexible())
-    ], spacing: 16) {
-      ForEach(store.sensorNodes, id: \.name) { sensor in
-        sensorStatusCard(sensor: sensor)
+    GeometryReader { geometry in
+      let availableWidth = geometry.size.width
+      let columns = adaptiveColumns(for: availableWidth)
+      
+      LazyVGrid(columns: columns, spacing: 12) {
+        ForEach(store.sensorNodes, id: \.name) { sensor in
+          sensorStatusCard(sensor: sensor)
+        }
       }
     }
     .transition(.scale.combined(with: .opacity))
     .animation(.easeInOut(duration: 0.3), value: hasData)
+  }
+  
+  private func adaptiveColumns(for width: CGFloat) -> [GridItem] {
+    if width < 300 {
+      // 垂直單排
+      return [GridItem(.flexible())]
+    } else if width < 450 {
+      // 水平兩排
+      return [GridItem(.flexible()), GridItem(.flexible())]
+    } else {
+      // 水平三排
+      return [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
+    }
   }
   
   @ViewBuilder
@@ -266,7 +328,8 @@ struct SensorNodeStatusView: View {
   }
 }
 
-#Preview {
+
+#Preview("SensorNodeStatusView - Full") {
   SensorNodeStatusView(
     store: .init(
       initialState: SensorNodeStatusFeature.State(
@@ -278,7 +341,8 @@ struct SensorNodeStatusView: View {
         ],
         topicName: sensorNodeStatusTopic,
         displayName: "Sensor Status Monitor",
-        lastUpdateTime: Date()
+        lastUpdateTime: Date(),
+        isMiniMode: false
       ),
       reducer: {
         SensorNodeStatusFeature()
@@ -287,4 +351,54 @@ struct SensorNodeStatusView: View {
       }
     )
   )
+}
+
+#Preview("SensorNodeStatusView - Mini") {
+  VStack(spacing: 16) {
+    Text("Mini View with Data")
+      .font(.headline)
+    
+    SensorNodeStatusView(
+      store: .init(
+        initialState: SensorNodeStatusFeature.State(
+          sensorNodes: [
+            SensorNodeStatus(name: "platform_sensor_node", status: .working),
+            SensorNodeStatus(name: "telescope_sensor_node", status: .working),
+            SensorNodeStatus(name: "turntable_sensor_node", status: .degraded),
+            SensorNodeStatus(name: "jib_sensor_node", status: .disconnected)
+          ],
+          topicName: sensorNodeStatusTopic,
+          displayName: "Sensor Status Monitor",
+          lastUpdateTime: Date(),
+          isMiniMode: true
+        ),
+        reducer: {
+          SensorNodeStatusFeature()
+        }, withDependencies: {
+          $0.mqttClientKit = .previewValue
+        }
+      )
+    )
+    
+    Text("Mini View Empty")
+      .font(.headline)
+    
+    SensorNodeStatusView(
+      store: .init(
+        initialState: SensorNodeStatusFeature.State(
+          sensorNodes: [],
+          topicName: sensorNodeStatusTopic,
+          displayName: "Sensor Status Monitor",
+          lastUpdateTime: Date(),
+          isMiniMode: true
+        ),
+        reducer: {
+          SensorNodeStatusFeature()
+        }, withDependencies: {
+          $0.mqttClientKit = .previewValue
+        }
+      )
+    )
+  }
+  .padding()
 }

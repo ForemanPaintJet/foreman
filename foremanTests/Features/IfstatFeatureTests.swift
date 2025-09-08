@@ -29,6 +29,8 @@ final class IfstatFeatureTests: XCTestCase {
     expectNoDifference(store.state.topicName, "test/topic")
     expectNoDifference(store.state.displayName, "Test Sensor")
     expectNoDifference(store.state.unit, "test-unit")
+    expectNoDifference(store.state.isMiniMode, false) // Default mini mode
+    expectNoDifference(store.state.id, "test/topic") // Computed ID property
   }
   
   func testTaskAction() async {
@@ -220,5 +222,56 @@ final class IfstatFeatureTests: XCTestCase {
     
     // Verify latest data is now the second one (last in queue)
     expectNoDifference(store.state.latestData, secondData)
+  }
+  
+  func testSetMiniMode() async {
+    let store = TestStore(
+      initialState: IfstatFeature.State(
+        topicName: "test/topic",
+        unit: "test-unit",
+        isMiniMode: false
+      ),
+      reducer: { IfstatFeature() }
+    )
+    
+    await store.send(.view(.setMiniMode(true))) {
+      $0.isMiniMode = true
+    }
+    
+    await store.send(.view(.setMiniMode(false))) {
+      $0.isMiniMode = false
+    }
+  }
+  
+  func testIdentifiableConformance() async {
+    let store = TestStore(
+      initialState: IfstatFeature.State(
+        topicName: "network/monitoring/data",
+        unit: "MB/s"
+      ),
+      reducer: { IfstatFeature() }
+    )
+    
+    // Test that ID is computed from topicName
+    expectNoDifference(store.state.id, "network/monitoring/data")
+    expectNoDifference(store.state.id, store.state.topicName)
+  }
+  
+  func testInitialStateWithMiniMode() async {
+    let store = TestStore(
+      initialState: IfstatFeature.State(
+        topicName: "test/topic",
+        displayName: "Test Monitor",
+        unit: "bytes/s",
+        isMiniMode: true
+      ),
+      reducer: { IfstatFeature() }
+    )
+    
+    expectNoDifference(store.state.isMiniMode, true)
+    expectNoDifference(store.state.topicName, "test/topic")
+    expectNoDifference(store.state.displayName, "Test Monitor")
+    expectNoDifference(store.state.unit, "bytes/s")
+    expectNoDifference(store.state.id, "test/topic")
   }
 }

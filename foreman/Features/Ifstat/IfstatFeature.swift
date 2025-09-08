@@ -26,7 +26,10 @@ struct IfstatMqttMessage: Codable, Equatable {
 @Reducer
 struct IfstatFeature {
     @ObservableState
-    struct State: Equatable {
+    struct State: Equatable, Identifiable {
+      var id: String {
+        topicName
+      }
         var interfaceData: Deque<IfstatMqttMessage> = []
         var topicName: String = ""
         var displayName: String? = nil
@@ -35,6 +38,7 @@ struct IfstatFeature {
         var windowSize: Int = 10 // Number of recent data points to keep in sliding window
         var lastRefreshTime: Date = .init()
         var lastError: String?
+        var isMiniMode: Bool = false
 
         // MQTT Subscriber Feature for handling ifstat data
         var mqttSubscriber: MqttSubscriberFeature.State = .init()
@@ -63,6 +67,7 @@ struct IfstatFeature {
             case changeTimeRange(TimeInterval)
             case changeWindowSize(Int)
             case clearError
+            case setMiniMode(Bool)
         }
 
         @CasePathable
@@ -159,6 +164,10 @@ struct IfstatFeature {
 
         case .clearError:
             state.lastError = nil
+            return .none
+            
+        case .setMiniMode(let isMini):
+            state.isMiniMode = isMini
             return .none
         }
     }

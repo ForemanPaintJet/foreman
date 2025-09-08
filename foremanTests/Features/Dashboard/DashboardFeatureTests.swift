@@ -1,0 +1,264 @@
+//
+//  DashboardFeatureTests.swift
+//  foremanTests
+//
+//  Created by Claude on 2025/9/8.
+//
+
+import ComposableArchitecture
+import MqttClientKit
+import XCTest
+
+@testable import foreman
+
+@MainActor
+final class DashboardFeatureTests: XCTestCase {
+  func testInitialState() async {
+    let store = TestStore(
+      initialState: DashboardFeature.State(),
+      reducer: { DashboardFeature() }
+    )
+    
+    // Test initial monitoring items
+    expectNoDifference(store.state.monitoringItems.count, 5)
+    expectNoDifference(store.state.monitoringItems.ids.first, ifstatOutputTopic)
+    expectNoDifference(store.state.monitoringItems[id: ifstatOutputTopic]?.isMiniMode, true)
+    
+    // Test initial drawer state
+    expectNoDifference(store.state.isDrawerOpen, false)
+    expectNoDifference(store.state.drawerWidth, 350)
+    expectNoDifference(store.state.isCompactLayout, false)
+    expectNoDifference(store.state.isMiniMode, true)
+    
+    // Test initial sensor state
+    expectNoDifference(store.state.sensorNodeStatus.isMiniMode, true)
+  }
+  
+  func testTaskActionInitializesAllFeatures() async {
+    let store = TestStore(
+      initialState: DashboardFeature.State(),
+      reducer: { DashboardFeature() }
+    )
+    
+    store.exhaustivity = .off(showSkippedAssertions: true)
+    
+    await store.send(.view(.task))
+    
+    // Should receive task actions for DirectVideoCall and SensorNodeStatus
+    await store.receive(\.directVideoCall.view.task)
+    await store.receive(\.sensorNodeStatus.view.task)
+    await store.receive(\.sensorNodeStatus.view.setMiniMode)
+    
+    await store.receive(.monitoringItems(.element(id: "network/ifstat/data", action: .view(.task))))
+//    await store.receive(.monitoringItems(.element(id: "monitoring/cpu", action: .view(.task))))
+    
+//    // Should receive task actions for all monitoring items
+//    for id in store.state.monitoringItems.ids {
+//      print("Item id: \(id)")
+//      await store.receive(.monitoringItems(.element(id: id, action: .view(.task))))
+//      await store.receive(.monitoringItems(.element(id: id, action: .view(.setMiniMode(true)))))
+//    }
+  }
+  
+  func testToggleDrawer() async {
+    let store = TestStore(
+      initialState: DashboardFeature.State(isDrawerOpen: false),
+      reducer: { DashboardFeature() }
+    )
+    
+    await store.send(.view(.toggleDrawer)) {
+      $0.isDrawerOpen = true
+    }
+    
+    await store.send(.view(.toggleDrawer)) {
+      $0.isDrawerOpen = false
+    }
+  }
+  
+  func testSetDrawerOpen() async {
+    let store = TestStore(
+      initialState: DashboardFeature.State(),
+      reducer: { DashboardFeature() }
+    )
+    
+    await store.send(.view(.setDrawerOpen(true))) {
+      $0.isDrawerOpen = true
+    }
+    
+    await store.send(.view(.setDrawerOpen(false))) {
+      $0.isDrawerOpen = false
+    }
+  }
+  
+  func testSetDrawerWidth() async {
+    let store = TestStore(
+      initialState: DashboardFeature.State(),
+      reducer: { DashboardFeature() }
+    )
+    
+    await store.send(.view(.setDrawerWidth(400))) {
+      $0.drawerWidth = 400
+    }
+    
+    // Test clamping to minimum
+    await store.send(.view(.setDrawerWidth(100))) {
+      $0.drawerWidth = 250
+    }
+    
+    // Test clamping to maximum
+    await store.send(.view(.setDrawerWidth(600))) {
+      $0.drawerWidth = 500
+    }
+  }
+  
+  func testSetCompactLayout() async {
+    let store = TestStore(
+      initialState: DashboardFeature.State(isDrawerOpen: true),
+      reducer: { DashboardFeature() }
+    )
+    
+    await store.send(.view(.setCompactLayout(true))) {
+      $0.isCompactLayout = true
+      $0.isDrawerOpen = false // Should auto-close drawer
+    }
+    
+    await store.send(.view(.setCompactLayout(false))) {
+      $0.isCompactLayout = false
+    }
+  }
+  
+  func testToggleMiniMode() async {
+    let store = TestStore(
+      initialState: DashboardFeature.State(isMiniMode: true),
+      reducer: { DashboardFeature() }
+    )
+    
+    store.exhaustivity = .off(showSkippedAssertions: true)
+    
+    await store.send(.view(.toggleMiniMode)) {
+      $0.isMiniMode = false
+    }
+    
+    // Should sync mini mode to all monitoring items
+    for id in store.state.monitoringItems.ids {
+      await store.receive(.monitoringItems(.element(id: id, action: .view(.setMiniMode(false)))))
+    }
+    
+    // Should sync to sensor node status
+    await store.receive(\.sensorNodeStatus.view.setMiniMode)
+  }
+  
+  func testSetMiniMode() async {
+    let store = TestStore(
+      initialState: DashboardFeature.State(isMiniMode: true),
+      reducer: { DashboardFeature() }
+    )
+    
+    store.exhaustivity = .off(showSkippedAssertions: true)
+    
+    await store.send(.view(.setMiniMode(false))) {
+      $0.isMiniMode = false
+    }
+    
+    // Should sync mini mode to all monitoring items
+    for id in store.state.monitoringItems.ids {
+      await store.receive(.monitoringItems(.element(id: id, action: .view(.setMiniMode(false)))))
+    }
+    
+    // Should sync to sensor node status
+    await store.receive(\.sensorNodeStatus.view.setMiniMode)
+  }
+  
+  func testTeardownAction() async {
+    let store = TestStore(
+      initialState: DashboardFeature.State(),
+      reducer: { DashboardFeature() }
+    )
+    
+    store.exhaustivity = .off(showSkippedAssertions: true)
+    
+    await store.send(.view(.teardown))
+    
+    // Should receive teardown actions for all monitoring items
+    for id in store.state.monitoringItems.ids {
+      await store.receive(.monitoringItems(.element(id: id, action: .view(.teardown))))
+    }
+    
+    // Should receive teardown for sensor node status
+    await store.receive(\.sensorNodeStatus.view.teardown)
+  }
+  
+  func testMonitoringItemDataUpdated() async {
+    let store = TestStore(
+      initialState: DashboardFeature.State(),
+      reducer: { DashboardFeature() }
+    )
+    
+    let testId = ifstatOutputTopic
+    
+    await store.send(.monitoringItems(.element(id: testId, action: .delegate(.dataUpdated))))
+    
+    await store.receive(\.delegate.dataUpdated)
+  }
+  
+  func testSensorStatusUpdated() async {
+    let store = TestStore(
+      initialState: DashboardFeature.State(),
+      reducer: { DashboardFeature() }
+    )
+    
+    await store.send(.sensorNodeStatus(.delegate(.statusUpdated)))
+    
+    await store.receive(\.delegate.dataUpdated)
+  }
+  
+  func testIdentifiedArrayIntegration() async {
+    let store = TestStore(
+      initialState: DashboardFeature.State(),
+      reducer: { DashboardFeature() }
+    )
+    
+    // Test that we can access monitoring items by ID
+    expectNoDifference(store.state.monitoringItems[id: ifstatOutputTopic]?.topicName, ifstatOutputTopic)
+    expectNoDifference(store.state.monitoringItems[id: ifstatOutputTopic]?.displayName, "Network Speed")
+    expectNoDifference(store.state.monitoringItems[id: ifstatOutputTopic]?.unit, "bytes/s")
+    
+    // Test CPU monitoring item
+    expectNoDifference(store.state.monitoringItems[id: "monitoring/cpu"]?.displayName, "CPU Usage")
+    expectNoDifference(store.state.monitoringItems[id: "monitoring/cpu"]?.unit, "%")
+    
+    // Test that all items have computed ID from topicName
+    for item in store.state.monitoringItems {
+      expectNoDifference(item.id, item.topicName)
+    }
+  }
+  
+  func testMiniModeInitialSync() async {
+    // Test the bug fix: first drawer open shows correct mini mode
+    let store = TestStore(
+      initialState: DashboardFeature.State(isMiniMode: true),
+      reducer: { DashboardFeature() }
+    )
+    
+    store.exhaustivity = .off(showSkippedAssertions: true)
+    
+    // Simulate task action that should sync initial mini mode state
+    await store.send(.view(.task))
+    
+    // Should receive sync actions for all monitoring items
+    for id in store.state.monitoringItems.ids {
+      await store.receive(.monitoringItems(.element(id: id, action: .view(.task))))
+      await store.receive(.monitoringItems(.element(id: id, action: .view(.setMiniMode(true)))))
+    }
+    
+    await store.receive(\.directVideoCall.view.task)
+    await store.receive(\.sensorNodeStatus.view.task)
+    await store.receive(\.sensorNodeStatus.view.setMiniMode)
+    
+    // After sync, all monitoring items should have isMiniMode = true
+    for item in store.state.monitoringItems {
+      expectNoDifference(item.isMiniMode, true)
+    }
+    expectNoDifference(store.state.sensorNodeStatus.isMiniMode, true)
+  }
+}

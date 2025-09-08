@@ -22,6 +22,36 @@ struct IfstatView: View {
   }
   
   var body: some View {
+    if store.isMiniMode {
+      miniView
+    } else {
+      fullView
+    }
+  }
+  
+  @ViewBuilder
+  private var miniView: some View {
+    HStack(spacing: 8) {
+      VStack(alignment: .leading, spacing: 1) {
+        Text(sensorDisplayName)
+          .font(.caption)
+          .fontWeight(.medium)
+        Text(sensorUnit)
+          .font(.caption2)
+          .foregroundColor(.secondary)
+      }
+      
+      MiniChart(data: Array(store.interfaceData.suffix(10)))
+        .frame(width: 80, height: 30)
+    }
+    .padding(8)
+    .background(Color(.systemBackground))
+    .cornerRadius(6)
+    .shadow(radius: 0.5)
+  }
+  
+  @ViewBuilder
+  private var fullView: some View {
     NavigationView {
       ScrollView {
         VStack(spacing: 20) {
@@ -29,7 +59,7 @@ struct IfstatView: View {
             errorBanner(error: error)
           }
           
-          headerView
+//          headerView
           
           if hasData {
             dataVisualizationCard
@@ -48,12 +78,6 @@ struct IfstatView: View {
       }
     }
     .navigationViewStyle(.stack)
-    .task {
-      send(.task)
-    }
-    .onDisappear {
-      send(.teardown)
-    }
   }
   
   @ViewBuilder
@@ -338,13 +362,58 @@ struct IfstatView: View {
   }
 }
 
-#Preview {
+// MARK: - Mini Chart Component
+
+struct MiniChart: View {
+  let data: [IfstatMqttMessage]
+  
+  var body: some View {
+    if data.isEmpty {
+      Rectangle()
+        .fill(Color.gray.opacity(0.2))
+        .overlay(
+          Text("No data")
+            .font(.caption2)
+            .foregroundColor(.secondary)
+        )
+    } else {
+      Canvas { context, size in
+        guard data.count > 1 else { return }
+        
+        let maxValue = data.map(\.value).max() ?? 1
+        let minValue = data.map(\.value).min() ?? 0
+        let valueRange = max(1, maxValue - minValue)
+        
+        let stepX = size.width / CGFloat(data.count - 1)
+        
+        var path = Path()
+        
+        for (index, point) in data.enumerated() {
+          let x = CGFloat(index) * stepX
+          let normalizedValue = CGFloat(point.value - minValue) / CGFloat(valueRange)
+          let y = size.height - (normalizedValue * size.height)
+          
+          if index == 0 {
+            path.move(to: CGPoint(x: x, y: y))
+          } else {
+            path.addLine(to: CGPoint(x: x, y: y))
+          }
+        }
+        
+        context.stroke(path, with: .color(.blue), lineWidth: 1.5)
+      }
+    }
+  }
+}
+
+#Preview("IfstatView - Full") {
   IfstatView(
     store: .init(
       initialState: IfstatFeature.State(
         topicName: ifstatOutputTopic,
         displayName: "Network Speed",
-        unit: "bytes/s"
+        unit: "bytes/s",
+        isMiniMode: false
       ),
       reducer: {
         IfstatFeature()
@@ -353,4 +422,57 @@ struct IfstatView: View {
       }
     )
   )
+}
+
+#Preview("IfstatView - Mini") {
+  IfstatView(
+    store: .init(
+      initialState: {
+        var state = IfstatFeature.State(
+          topicName: ifstatOutputTopic,
+          displayName: "Network Speed",
+          unit: "bytes/s",
+          isMiniMode: true
+        )
+        state.interfaceData = [
+          IfstatMqttMessage(value: 1024, timestamp: Date().addingTimeInterval(-300)),
+          IfstatMqttMessage(value: 2048, timestamp: Date().addingTimeInterval(-240)),
+          IfstatMqttMessage(value: 1536, timestamp: Date().addingTimeInterval(-180)),
+          IfstatMqttMessage(value: 3072, timestamp: Date().addingTimeInterval(-120)),
+          IfstatMqttMessage(value: 2560, timestamp: Date().addingTimeInterval(-60)),
+          IfstatMqttMessage(value: 1792, timestamp: Date())
+        ]
+        return state
+      }(),
+      reducer: {
+        IfstatFeature()
+      }, withDependencies: {
+          $0.mqttClientKit = .previewValue
+      }
+    )
+  )
+}
+
+#Preview("MiniChart") {
+  VStack(spacing: 16) {
+    Text("MiniChart with Data")
+      .font(.headline)
+    
+    MiniChart(data: [
+      IfstatMqttMessage(value: 1024, timestamp: Date().addingTimeInterval(-300)),
+      IfstatMqttMessage(value: 2048, timestamp: Date().addingTimeInterval(-240)),
+      IfstatMqttMessage(value: 1536, timestamp: Date().addingTimeInterval(-180)),
+      IfstatMqttMessage(value: 3072, timestamp: Date().addingTimeInterval(-120)),
+      IfstatMqttMessage(value: 2560, timestamp: Date().addingTimeInterval(-60)),
+      IfstatMqttMessage(value: 1792, timestamp: Date())
+    ])
+    .frame(height: 50)
+    
+    Text("MiniChart Empty")
+      .font(.headline)
+    
+    MiniChart(data: [])
+      .frame(height: 50)
+  }
+  .padding()
 }

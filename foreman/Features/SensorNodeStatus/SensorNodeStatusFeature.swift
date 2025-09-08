@@ -57,6 +57,7 @@ struct SensorNodeStatusFeature {
     var displayName: String? = nil
     var lastUpdateTime: Date = .init()
     var lastError: String?
+    var isMiniMode: Bool = false
     
     // MQTT Subscriber Feature for handling sensor status data
     var mqttSubscriber: MqttSubscriberFeature.State = .init()
@@ -105,6 +106,7 @@ struct SensorNodeStatusFeature {
       case task
       case teardown
       case clearError
+      case setMiniMode(Bool)
     }
     
     @CasePathable
@@ -186,6 +188,10 @@ struct SensorNodeStatusFeature {
       
     case .clearError:
       state.lastError = nil
+      return .none
+      
+    case .setMiniMode(let isMini):
+      state.isMiniMode = isMini
       return .none
     }
   }

@@ -24,6 +24,7 @@ final class SensorNodeStatusFeatureTests: XCTestCase {
     let state = store.state
     expectNoDifference(state.sensorNodes, [])
     expectNoDifference(state.topicName, sensorNodeStatusTopic)
+    expectNoDifference(state.isMiniMode, false) // Default mini mode
   }
   
   func testSensorNodeStatusParsing() async {
@@ -174,5 +175,29 @@ final class SensorNodeStatusFeatureTests: XCTestCase {
     await store.send(.parser(.delegate(.parsingFailed(errorMessage)))) {
       $0.lastError = errorMessage
     }
+  }
+  
+  func testSetMiniMode() async {
+    let store = TestStore(initialState: SensorNodeStatusFeature.State(isMiniMode: false)) {
+      SensorNodeStatusFeature()
+    }
+    
+    await store.send(.view(.setMiniMode(true))) {
+      $0.isMiniMode = true
+    }
+    
+    await store.send(.view(.setMiniMode(false))) {
+      $0.isMiniMode = false
+    }
+  }
+  
+  func testInitialStateWithMiniMode() {
+    let store = TestStore(initialState: SensorNodeStatusFeature.State(isMiniMode: true)) {
+      SensorNodeStatusFeature()
+    }
+    
+    expectNoDifference(store.state.isMiniMode, true)
+    expectNoDifference(store.state.topicName, sensorNodeStatusTopic)
+    expectNoDifference(store.state.sensorNodes, [])
   }
 }
