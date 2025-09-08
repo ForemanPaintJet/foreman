@@ -36,9 +36,17 @@ struct IfstatView: View {
         Text(sensorDisplayName)
           .font(.caption)
           .fontWeight(.medium)
-        Text(sensorUnit)
-          .font(.caption2)
-          .foregroundColor(.secondary)
+        HStack(spacing: 2) {
+          if let latestValue = store.latestData?.value {
+            Text("\(latestValue)")
+              .font(.caption2)
+              .fontWeight(.medium)
+              .foregroundColor(.primary)
+          }
+          Text(sensorUnit)
+            .font(.caption2)
+            .foregroundColor(.secondary)
+        }
       }
       
       MiniChart(data: Array(store.interfaceData.suffix(10)))

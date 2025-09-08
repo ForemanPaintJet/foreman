@@ -33,6 +33,12 @@ struct DashboardView: View {
         .overlay(alignment: .topTrailing) {
           // Control buttons overlay (always on top)
           VStack {
+            // Dynamic top spacing based on drawer state
+            if store.isDrawerOpen {
+              Spacer()
+                .frame(height: store.isMiniMode ? 80 : 400)
+            }
+            
             HStack {
               Spacer()
               HStack(spacing: 8) {
