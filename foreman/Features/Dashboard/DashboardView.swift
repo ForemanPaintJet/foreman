@@ -140,6 +140,9 @@ struct DashboardView: View {
                 }
                 
                 drawerToggleButton
+                
+                // More button
+                moreButton
               }
             }
             Spacer()
@@ -272,6 +275,41 @@ struct DashboardView: View {
     .buttonStyle(.plain)
     .shadow(radius: 2)
   }
+  
+  @ViewBuilder
+  private var moreButton: some View {
+    Menu {
+      Button("Settings") {
+        send(.showSettings)
+      }
+      
+      Menu("Trigger Alert") {
+        ForEach(DirectVideoCallFeature.State.AlertType.allCases, id: \.self) { alertType in
+          Button(action: {
+            send(.simulateAlert(alertType))
+          }) {
+            HStack {
+              if alertType != .none {
+                Circle()
+                  .fill(alertType.color)
+                  .frame(width: 12, height: 12)
+              }
+              Text(alertType.rawValue)
+            }
+          }
+        }
+      }
+    } label: {
+      Image(systemName: "ellipsis")
+        .font(.system(size: 16, weight: .medium))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+        .foregroundColor(.primary)
+    }
+    .shadow(radius: 2)
+  }
+  
   
   @ViewBuilder
   private var monitoringDrawer: some View {

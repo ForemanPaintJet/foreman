@@ -349,4 +349,47 @@ final class DashboardFeatureTests: XCTestCase {
     // Advance time by 5 seconds - should not receive any reset action
     await clock.advance(by: .seconds(5))
   }
+  
+  func testShowSettings() async {
+    let store = TestStore(
+      initialState: DashboardFeature.State(),
+      reducer: { DashboardFeature() }
+    )
+    
+    await store.send(.view(.showSettings))
+    // Settings action just logs - no state changes expected
+  }
+  
+  func testSimulateAlert() async {
+    let store = TestStore(
+      initialState: DashboardFeature.State(),
+      reducer: { DashboardFeature() }
+    )
+    
+    // Test all alert types
+    await store.send(.view(.simulateAlert(.green)))
+    await store.receive(\.directVideoCall.view.simulateAlert)
+    
+    await store.send(.view(.simulateAlert(.yellow)))
+    await store.receive(\.directVideoCall.view.simulateAlert)
+    
+    await store.send(.view(.simulateAlert(.red)))
+    await store.receive(\.directVideoCall.view.simulateAlert)
+    
+    await store.send(.view(.simulateAlert(.none)))
+    await store.receive(\.directVideoCall.view.simulateAlert)
+  }
+  
+  func testAlertSimulationForwardingToDirectVideoCall() async {
+    let store = TestStore(
+      initialState: DashboardFeature.State(),
+      reducer: { DashboardFeature() }
+    )
+    
+    // Test that alert simulation is properly forwarded to DirectVideoCallFeature
+    await store.send(.view(.simulateAlert(.red)))
+    
+    // Should receive the forwarded action with the correct alert type
+    await store.receive(.directVideoCall(.view(.simulateAlert(.red))))
+  }
 }

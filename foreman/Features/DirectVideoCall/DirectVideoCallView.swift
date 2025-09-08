@@ -36,10 +36,6 @@ struct DirectVideoCallView: View {
                     )
                     .animation(.easeInOut(duration: 0.5), value: store.currentAlert)
 
-                cornerOverlay(position: .topLeading) {
-                    // Alert simulation buttons
-                    AlertSimulationView(store: store)
-                }
 
 
 
@@ -72,64 +68,6 @@ struct DirectVideoCallView: View {
 
 
 
-    @ViewBuilder
-    func AlertSimulationView(store: StoreOf<DirectVideoCallFeature>) -> some View {
-        VStack(spacing: 4) {
-            // Current alert status
-            if store.currentAlert != .none {
-                VStack(spacing: 2) {
-                    Circle()
-                        .fill(store.currentAlert.color)
-                        .frame(width: 8, height: 8)
-                        .scaleEffect(1.0 + (store.currentAlert == .red ? 0.3 : 0.1))
-                        .animation(
-                            .easeInOut(duration: 1.0).repeatForever(autoreverses: true),
-                            value: store.currentAlert
-                        )
-
-                    Text(store.currentAlert.message)
-                        .font(.caption2)
-                        .fontWeight(.medium)
-                        .foregroundColor(store.currentAlert.color)
-                        .multilineTextAlignment(.center)
-                        .frame(maxWidth: 80)
-                }
-                .padding(6)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
-            }
-
-            // Alert simulation buttons
-            VStack(spacing: 4) {
-                ForEach(DirectVideoCallFeature.State.AlertType.allCases, id: \.self) { alertType in
-                    Button(action: {
-                        send(.simulateAlert(alertType))
-                    }) {
-                        HStack(spacing: 4) {
-                            Circle()
-                                .fill(alertType.color)
-                                .frame(width: 12, height: 12)
-
-                            Text(alertType.rawValue)
-                                .font(.caption2)
-                                .fontWeight(.medium)
-                        }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(
-                            RoundedRectangle(cornerRadius: 6)
-                                .fill(
-                                    alertType == store.currentAlert
-                                        ? alertType.color.opacity(0.2) : Color.black.opacity(0.1))
-                        )
-                        .foregroundColor(alertType == .none ? .primary : alertType.color)
-                    }
-                }
-            }
-            .padding(8)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
-            .shadow(radius: 2)
-        }
-    }
 
 }
 

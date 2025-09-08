@@ -96,6 +96,8 @@ struct DashboardFeature {
       case setMiniMode(Bool)
       case showInfo(Bool)
       case setRunningGesture(GestureType)
+      case showSettings
+      case simulateAlert(DirectVideoCallFeature.State.AlertType)
     }
     
     @CasePathable
@@ -202,6 +204,15 @@ struct DashboardFeature {
     case .view(.showInfo(let show)):
       state.showInfoPopover = show
       return .none
+      
+    case .view(.showSettings):
+      logger.info("⚙️ DashboardFeature: Settings action triggered")
+      // TODO: Implement settings navigation or modal
+      return .none
+      
+    case .view(.simulateAlert(let alertType)):
+      logger.info("🚨 DashboardFeature: Simulating alert: \(alertType.rawValue)")
+      return .send(.directVideoCall(.view(.simulateAlert(alertType))))
       
     case .view(.setRunningGesture(let gesture)):
       state.currentRunningGesture = gesture
