@@ -164,16 +164,8 @@ struct SensorNodeStatusView: View {
   }
   
   private func adaptiveColumns(for width: CGFloat) -> [GridItem] {
-    if width < 300 {
-      // 垂直單排
-      return [GridItem(.flexible())]
-    } else if width < 450 {
-      // 水平兩排
-      return [GridItem(.flexible()), GridItem(.flexible())]
-    } else {
-      // 水平三排
-      return [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
-    }
+    // 固定 2x2 格式
+    return [GridItem(.flexible()), GridItem(.flexible())]
   }
   
   @ViewBuilder
