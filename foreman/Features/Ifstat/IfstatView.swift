@@ -61,22 +61,18 @@ struct IfstatView: View {
   @ViewBuilder
   private var fullView: some View {
     NavigationView {
-      ScrollView {
-        VStack(spacing: 20) {
-          if let error = store.lastError {
-            errorBanner(error: error)
-          }
-          
-//          headerView
-          
-          if hasData {
-            dataVisualizationCard
-          } else {
-            emptyStateView
-          }
+      VStack(spacing: 20) {
+        if let error = store.lastError {
+          errorBanner(error: error)
         }
-        .padding()
+          
+        if hasData {
+          dataVisualizationCard
+        } else {
+          emptyStateView
+        }
       }
+      .padding()
       .navigationTitle("\(store.topicName) Monitoring")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
@@ -86,36 +82,6 @@ struct IfstatView: View {
       }
     }
     .navigationViewStyle(.stack)
-  }
-  
-  @ViewBuilder
-  private var headerView: some View {
-    VStack(spacing: 8) {
-      HStack {
-        VStack(alignment: .leading, spacing: 4) {
-          Text("MQTT Data Monitoring")
-            .font(.title2)
-            .fontWeight(.bold)
-          
-          Text("Topic: \(store.topicName)")
-            .font(.subheadline)
-            .foregroundColor(.secondary)
-        }
-        
-        Spacer()
-        
-        VStack(alignment: .trailing, spacing: 4) {
-          dataSourceIndicator
-          
-          Text("Updated: \(formatRelativeTime(store.lastRefreshTime))")
-            .font(.caption)
-            .foregroundColor(.secondary)
-        }
-      }
-      
-      Divider()
-        .padding(.horizontal, -16)
-    }
   }
   
   @ViewBuilder
@@ -210,7 +176,6 @@ struct IfstatView: View {
           )
           .foregroundStyle(.blue.opacity(0.1))
         }
-        .frame(height: 200)
         .chartXAxis {
           AxisMarks(values: .automatic(desiredCount: 5)) { value in
             AxisGridLine()
@@ -426,7 +391,7 @@ struct MiniChart: View {
       reducer: {
         IfstatFeature()
       }, withDependencies: {
-          $0.mqttClientKit = .previewValue
+        $0.mqttClientKit = .previewValue
       }
     )
   )
@@ -455,7 +420,7 @@ struct MiniChart: View {
       reducer: {
         IfstatFeature()
       }, withDependencies: {
-          $0.mqttClientKit = .previewValue
+        $0.mqttClientKit = .previewValue
       }
     )
   )

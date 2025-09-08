@@ -35,7 +35,7 @@ struct IfstatFeature {
         var displayName: String? = nil
         var unit: String = ""
         var timeRange: TimeInterval = 300 // 5 minutes default
-        var windowSize: Int = 10 // Number of recent data points to keep in sliding window
+        var windowSize: Int = 50 // Number of recent data points to keep in sliding window
         var lastRefreshTime: Date = .init()
         var lastError: String?
         var isMiniMode: Bool = false
