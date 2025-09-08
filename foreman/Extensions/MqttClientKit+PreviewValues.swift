@@ -45,13 +45,25 @@ extension MqttClientKit {
       received: {
         AsyncThrowingStream { continuation in
           Task {
+            // All monitoring topics with their mock data generators
+            let topics = [
+              (topic: ifstatOutputTopic, generator: { Int.random(in: 1...100) }),
+              (topic: "monitoring/cpu", generator: { Int.random(in: 0...100) }),
+              (topic: "monitoring/memory", generator: { Int.random(in: 100...8000) }),
+              (topic: "monitoring/disk", generator: { Int.random(in: 0...500) }),
+              (topic: "monitoring/temperature", generator: { Int.random(in: 25...80) })
+            ]
+            
+            var currentTopicIndex = 0
+            
             while !Task.isCancelled {
-              let randomInt = Int.random(in: 1...100)
+              let currentTopic = topics[currentTopicIndex]
+              let mockValue = currentTopic.generator()
               let currentTimestamp = Date().timeIntervalSince1970
               
-              // Create IfstatMqttMessage with proper format
+              // Create IfstatMqttMessage with topic-appropriate mock value
               let ifstatMessage = IfstatMqttMessage(
-                value: randomInt, 
+                value: mockValue, 
                 timestamp: Date(timeIntervalSince1970: currentTimestamp)
               )
               
@@ -60,10 +72,13 @@ extension MqttClientKit {
               encoder.dateEncodingStrategy = .secondsSince1970
               let mockPayload = try! encoder.encode(ifstatMessage)
               
-              // Create mock MQTTPublishInfo with JSON payload
-              let mockMessage = MQTTPublishInfo(qos: .atMostOnce, retain: false, topicName: ifstatOutputTopic, payload: ByteBuffer(data: mockPayload), properties: [])
+              // Create mock MQTTPublishInfo with current topic
+              let mockMessage = MQTTPublishInfo(qos: .atMostOnce, retain: false, topicName: currentTopic.topic, payload: ByteBuffer(data: mockPayload), properties: [])
               
               continuation.yield(mockMessage)
+              
+              // Cycle through all topics
+              currentTopicIndex = (currentTopicIndex + 1) % topics.count
               
               try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
             }
