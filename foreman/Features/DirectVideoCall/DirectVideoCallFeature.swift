@@ -24,36 +24,10 @@ struct DirectVideoCallFeature {
     var networkSpeed: Double = 150.5  // Mbps
     var latency: Int = 12  // ms
 
-    // Alert system
-    var currentAlert: AlertType = .none
-    
     // WebRTC state
     var remoteVideoTracks: [VideoTrackInfo] = []
-
-    enum AlertType: String, CaseIterable, Equatable {
-      case none = "None"
-      case green = "Green"
-      case yellow = "Yellow"
-      case red = "Red"
-
-      var color: Color {
-        switch self {
-        case .none: .clear
-        case .green: .green
-        case .yellow: .yellow
-        case .red: .red
-        }
-      }
-
-      var message: String {
-        switch self {
-        case .none: ""
-        case .green: "System Normal"
-        case .yellow: "Warning Alert"
-        case .red: "Critical Alert"
-        }
-      }
-    }
+    var leftCameraTrack: VideoTrackInfo?
+    var rightCameraTrack: VideoTrackInfo?
   }
 
   @CasePathable
@@ -72,7 +46,6 @@ struct DirectVideoCallFeature {
       case updateDistanceRandom
       case closeConfig
       case closeHumanPose
-      case simulateAlert(State.AlertType)
     }
 
     @CasePathable
@@ -124,9 +97,6 @@ struct DirectVideoCallFeature {
       return .none
     case .view(.closeHumanPose):
       state.showHumanPose = false
-      return .none
-    case .view(.simulateAlert(let alertType)):
-      state.currentAlert = alertType
       return .none
     case ._internal(.batteryLevelChanged(let value)):
       state.batteryLevel = value

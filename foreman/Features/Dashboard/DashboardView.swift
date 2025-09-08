@@ -284,7 +284,7 @@ struct DashboardView: View {
       }
       
       Menu("Trigger Alert") {
-        ForEach(DirectVideoCallFeature.State.AlertType.allCases, id: \.self) { alertType in
+        ForEach(DashboardFeature.State.AlertType.allCases, id: \.self) { alertType in
           Button(action: {
             send(.simulateAlert(alertType))
           }) {

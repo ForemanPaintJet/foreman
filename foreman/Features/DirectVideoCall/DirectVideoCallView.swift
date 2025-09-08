@@ -9,6 +9,8 @@ import Charts
 import ComposableArchitecture
 import OSLog
 import SwiftUI
+import WebRTC
+import WebRTCCore
 
 @ViewAction(for: DirectVideoCallFeature.self)
 struct DirectVideoCallView: View {
@@ -20,21 +22,13 @@ struct DirectVideoCallView: View {
         VStack(spacing: 0) {
 
             ZStack {
-                // Main content area
-                VideoCallView(remoteVideoTracks: store.remoteVideoTracks)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                    .padding(.all, store.currentAlert == .none ? 0 : 20)
-                    .background(
-
-                        Color.black.shadow(
-                            .inner(
-                                color: store.currentAlert == .none
-                                    ? .black.opacity(0.4) : store.currentAlert.color,
-                                radius: store.currentAlert == .none ? 8 : 30
-                            ))
-
-                    )
-                    .animation(.easeInOut(duration: 0.5), value: store.currentAlert)
+                // Dual camera layout
+                DualCameraView(
+                    leftCameraTrack: store.leftCameraTrack,
+                    rightCameraTrack: store.rightCameraTrack
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .background(Color.black)
 
 
 
@@ -77,6 +71,73 @@ private func cornerOverlay(position: Alignment, @ViewBuilder content: () -> some
 {
     content()
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: position)
+}
+
+struct DualCameraView: View {
+    let leftCameraTrack: VideoTrackInfo?
+    let rightCameraTrack: VideoTrackInfo?
+    
+    var body: some View {
+        HStack(spacing: 8) {
+            // Left Camera
+            CameraView(
+                videoTrack: leftCameraTrack,
+                label: "Left Camera"
+            )
+            
+            // Right Camera
+            CameraView(
+                videoTrack: rightCameraTrack,
+                label: "Right Camera"
+            )
+        }
+        .background(Color.black)
+    }
+}
+
+struct CameraView: View {
+    let videoTrack: VideoTrackInfo?
+    let label: String
+    
+    var body: some View {
+        ZStack {
+            if let track = videoTrack {
+                VideoView(videoTrack: track.track)
+                    .aspectRatio(16/9, contentMode: .fit)
+            } else {
+                // Empty state
+                VStack(spacing: 12) {
+                    Image(systemName: "video.slash")
+                        .font(.system(size: 40))
+                        .foregroundColor(.gray)
+                    
+                    Text("No Signal")
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .aspectRatio(16/9, contentMode: .fit)
+            }
+            
+            // Camera label overlay
+            VStack {
+                HStack {
+                    Text(label)
+                        .font(.caption2)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(Color.black.opacity(0.7))
+                        .cornerRadius(4)
+                    Spacer()
+                }
+                Spacer()
+            }
+            .padding(8)
+        }
+        .background(Color.black)
+        .cornerRadius(8)
+    }
 }
 
 #Preview {

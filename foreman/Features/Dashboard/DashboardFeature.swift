@@ -8,6 +8,7 @@
 import ComposableArchitecture
 import OSLog
 import Dependencies
+import SwiftUI
 
 @Reducer
 struct DashboardFeature {
@@ -70,6 +71,34 @@ struct DashboardFeature {
     
     // Current running gesture state (defaults to idle)
     var currentRunningGesture: GestureType = .idle
+    
+    // Alert system
+    var currentAlert: AlertType = .none
+    
+    enum AlertType: String, CaseIterable, Equatable {
+      case none = "None"
+      case green = "Green"
+      case yellow = "Yellow"
+      case red = "Red"
+      
+      var color: Color {
+        switch self {
+        case .none: .clear
+        case .green: .green
+        case .yellow: .yellow
+        case .red: .red
+        }
+      }
+      
+      var message: String {
+        switch self {
+        case .none: ""
+        case .green: "System Normal"
+        case .yellow: "Warning Alert"
+        case .red: "Critical Alert"
+        }
+      }
+    }
   }
   
   @CasePathable
@@ -97,7 +126,7 @@ struct DashboardFeature {
       case showInfo(Bool)
       case setRunningGesture(GestureType)
       case showSettings
-      case simulateAlert(DirectVideoCallFeature.State.AlertType)
+      case simulateAlert(State.AlertType)
     }
     
     @CasePathable
@@ -211,8 +240,9 @@ struct DashboardFeature {
       return .none
       
     case .view(.simulateAlert(let alertType)):
+      state.currentAlert = alertType
       logger.info("🚨 DashboardFeature: Simulating alert: \(alertType.rawValue)")
-      return .send(.directVideoCall(.view(.simulateAlert(alertType))))
+      return .none
       
     case .view(.setRunningGesture(let gesture)):
       state.currentRunningGesture = gesture
