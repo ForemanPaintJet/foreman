@@ -123,6 +123,7 @@ struct WebRTCMqttFeature {
         var pendingIceCandidates: [ICECandidate] = []
         
         var directVideoCall: DirectVideoCallFeature.State = DirectVideoCallFeature.State()
+        var dashboard: DashboardFeature.State = DashboardFeature.State()
         var webRTCFeature: WebRTCFeature.State = WebRTCFeature.State()
         var deviceStats: DeviceStatsFeature.State = DeviceStatsFeature.State()
         var ifstat: IfstatFeature.State = IfstatFeature.State(
@@ -159,6 +160,7 @@ struct WebRTCMqttFeature {
         case delegate(DelegateAction)
         case alert(PresentationAction<Alert>)
         case directVideoCall(DirectVideoCallFeature.Action)
+        case dashboard(DashboardFeature.Action)
         case webRTCFeature(WebRTCFeature.Action)
         case deviceStats(DeviceStatsFeature.Action)
         case ifstat(IfstatFeature.Action)
@@ -225,6 +227,10 @@ struct WebRTCMqttFeature {
         Scope(state: \.directVideoCall, action: \.directVideoCall) {
             DirectVideoCallFeature()
         }
+        Scope(state: \.dashboard, action: \.dashboard) {
+            DashboardFeature()
+            .dependency(\.mqttClientKit, .previewValue)
+        }
         Scope(state: \.webRTCFeature, action: \.webRTCFeature) {
             WebRTCFeature()
         }
@@ -262,6 +268,9 @@ struct WebRTCMqttFeature {
             return .none
             
         case .directVideoCall:
+            return .none
+            
+        case .dashboard:
             return .none
             
         case .webRTCFeature(.delegate(let delegateAction)):
@@ -581,11 +590,15 @@ struct WebRTCMqttFeature {
         case let .videoTrackAdded(trackInfo):
             // Update DirectVideoCall feature with video track info
             state.directVideoCall.remoteVideoTracks.append(trackInfo)
+            // Also update Dashboard's DirectVideoCall feature
+            state.dashboard.directVideoCall.remoteVideoTracks.append(trackInfo)
             return .none
             
         case let .videoTrackRemoved(userId):
             // Update DirectVideoCall feature after video track removal
             state.directVideoCall.remoteVideoTracks = state.webRTCFeature.connectedPeers.compactMap { $0.videoTrack }
+            // Also update Dashboard's DirectVideoCall feature
+            state.dashboard.directVideoCall.remoteVideoTracks = state.webRTCFeature.connectedPeers.compactMap { $0.videoTrack }
             return .none
             
         case let .connectionStateChanged(userId, connectionState):
@@ -608,6 +621,7 @@ struct WebRTCMqttFeature {
             switch connectionState {
             case .connected:
                 logger.info("🜢 [MQTT] MQTT Connected")
+                state.isJoinedToRoom = true
                 state.lastError = nil
                 return .send(.delegate(.didConnect))
             case .disconnected:

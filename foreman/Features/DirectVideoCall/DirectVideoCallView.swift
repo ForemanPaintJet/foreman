@@ -82,13 +82,13 @@ struct DualCameraView: View {
             // Left Camera
             CameraView(
                 videoTrack: leftCameraTrack,
-                label: "Left Camera"
+                label: ""
             )
             
             // Right Camera
             CameraView(
                 videoTrack: rightCameraTrack,
-                label: "Right Camera"
+                label: ""
             )
         }
         .background(Color.black)
@@ -105,18 +105,11 @@ struct CameraView: View {
                 VideoView(videoTrack: track.track)
                     .aspectRatio(16/9, contentMode: .fit)
             } else {
-                // Empty state
-                VStack(spacing: 12) {
-                    Image(systemName: "video.slash")
-                        .font(.system(size: 40))
-                        .foregroundColor(.gray)
-                    
-                    Text("No Signal")
-                        .font(.caption)
-                        .foregroundColor(.gray)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .aspectRatio(16/9, contentMode: .fit)
+                // Empty state with mock camera
+                Image("mock_camera")
+                    .resizable()
+                    .aspectRatio(16/9, contentMode: .fit)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             
             // Camera label overlay

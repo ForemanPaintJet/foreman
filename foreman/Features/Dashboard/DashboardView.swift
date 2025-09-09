@@ -97,7 +97,26 @@ struct DashboardView: View {
       mainContentArea
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay(alignment: .top) {
-          // Top drawer for monitoring panels (floating overlay)
+          // Top center logo and branding (fixed position) - behind drawer
+          HStack(spacing: 12) {
+            Image("logo")
+              .resizable()
+              .aspectRatio(contentMode: .fit)
+              .frame(height: 28)
+            
+            Text("FOREMAN TECH")
+              .font(.headline)
+              .fontWeight(.bold)
+              .foregroundColor(.primary)
+          }
+          .padding(.horizontal, 20)
+          .padding(.vertical, 12)
+          .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+          .shadow(radius: 2)
+          .padding(.top)
+        }
+        .overlay(alignment: .top) {
+          // Top drawer for monitoring panels (floating overlay) - on top of logo
           if store.isDrawerOpen {
             monitoringDrawer
               .containerRelativeFrame(.vertical) { length, axis in
@@ -250,6 +269,18 @@ struct DashboardView: View {
         action: \.directVideoCall
       )
     )
+    .clipShape(RoundedRectangle(cornerRadius: 10))
+    .padding(.all, store.currentAlert == .none ? 0 : 20)
+    .background(
+      Color.black.shadow(
+        .inner(
+          color: store.currentAlert == .none
+            ? .black.opacity(0.4) : store.currentAlert.color,
+          radius: store.currentAlert == .none ? 8 : 30
+        )
+      )
+    )
+    .animation(.easeInOut(duration: 0.5), value: store.currentAlert)
   }
   
   @ViewBuilder
@@ -318,7 +349,7 @@ struct DashboardView: View {
       VStack(spacing: 0) {
         if store.isMiniMode {
           ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 12) {
+            HStack(spacing: 0) {
               // Sensor Status
               SensorNodeStatusView(
                 store: store.scope(

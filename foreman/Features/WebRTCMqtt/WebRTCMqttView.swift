@@ -25,8 +25,18 @@ struct WebRTCMqttView: View {
         ZStack {
             Group {
                 if store.isJoinedToRoom {
-                    DirectVideoCallView(
-                        store: store.scope(state: \.directVideoCall, action: \.directVideoCall)
+                    DashboardView(
+                        store: store.scope(state: \.dashboard, action: \.dashboard)
+                    )
+                    .transition(
+                        .asymmetric(
+                            insertion: .opacity
+                                .combined(with: .scale(scale: 0.95, anchor: .center))
+                                .combined(with: .move(edge: .bottom)),
+                            removal: .opacity
+                                .combined(with: .scale(scale: 1.05, anchor: .center))
+                                .combined(with: .move(edge: .top))
+                        )
                     )
                 } else {
                     VStack {
@@ -111,6 +121,16 @@ struct WebRTCMqttView: View {
                         Spacer()
                     }
                     .padding()
+                    .transition(
+                        .asymmetric(
+                            insertion: .opacity
+                                .combined(with: .scale(scale: 0.95, anchor: .center))
+                                .combined(with: .move(edge: .top)),
+                            removal: .opacity
+                                .combined(with: .scale(scale: 0.9, anchor: .center))
+                                .combined(with: .move(edge: .top))
+                        )
+                    )
                 }
             }
         }
@@ -129,6 +149,7 @@ struct WebRTCMqttView: View {
                 store: store.scope(state: \.ifstat, action: \.ifstat)
             )
         }
+        .animation(.easeInOut(duration: 0.8), value: store.isJoinedToRoom)
     }
 }
 

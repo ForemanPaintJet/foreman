@@ -54,7 +54,12 @@ struct DashboardFeature {
     )
     
     // Sensor status 保持獨立（因為是不同類型的 Feature）
-    var sensorNodeStatus: SensorNodeStatusFeature.State = SensorNodeStatusFeature.State(isMiniMode: true)
+    var sensorNodeStatus: SensorNodeStatusFeature.State = .init(sensorNodes: [
+      SensorNodeStatus(name: "platform_sensor_node", status: .working),
+      SensorNodeStatus(name: "telescope_sensor_node", status: .working),
+      SensorNodeStatus(name: "turntable_sensor_node", status: .degraded),
+      SensorNodeStatus(name: "jib_sensor_node", status: .disconnected)
+    ], isMiniMode: true)
     
     // Drawer state
     var isDrawerOpen: Bool = false
@@ -252,7 +257,7 @@ struct DashboardFeature {
       if gesture != .idle {
         return .run { send in
           @Dependency(\.continuousClock) var clock
-          try await clock.sleep(for: .seconds(3))
+          try await clock.sleep(for: .seconds(10))
           await send(._internal(.resetToIdle))
         }
         .cancellable(id: "gestureTimer")
