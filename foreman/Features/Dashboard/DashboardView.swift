@@ -50,41 +50,6 @@ enum GestureType: String, CaseIterable, Identifiable {
   }
 }
 
-// MARK: - Rotating Gradient Border View
-
-struct RotatingGradientBorderView<Content: View>: View {
-  let content: () -> Content
-  @State private var rotation: Double = 0
-  
-  var body: some View {
-    ZStack {
-      // Rotating gradient background
-      RoundedRectangle(cornerRadius: 16)
-        .fill(
-          AngularGradient(
-            colors: [.green, .blue, .purple, .pink, .orange, .green],
-            center: .center,
-            startAngle: .degrees(rotation),
-            endAngle: .degrees(rotation + 360)
-          )
-        )
-        .frame(width: 148, height: 148)
-        .rotationEffect(.degrees(rotation))
-        .onAppear {
-          withAnimation(.linear(duration: 3).repeatForever(autoreverses: false)) {
-            rotation = 360
-          }
-        }
-      
-      // Content with mask
-      content()
-        .overlay(
-          RoundedRectangle(cornerRadius: 12)
-            .stroke(Color.clear, lineWidth: 4)
-        )
-    }
-  }
-}
 
 @ViewAction(for: DashboardFeature.self)
 struct DashboardView: View {
@@ -189,58 +154,7 @@ struct DashboardView: View {
           }
         }
         .overlay(alignment: .bottomTrailing) {
-          // Fixed status cell in bottom-right corner
-          Button(action: {
-            send(.showInfo(!store.showInfoPopover))
-          }) {
-            VStack(spacing: 8) {
-              Text(store.currentRunningGesture.displayName)
-                .font(.callout)
-                .fontWeight(.bold)
-                .foregroundColor(.primary)
-                .multilineTextAlignment(.center)
-                .lineLimit(2)
-                .frame(minHeight: 35)
-              
-              if store.currentRunningGesture == .idle {
-                // Static border for idle state with subtle shadows
-                Image(store.currentRunningGesture.imageName)
-                  .resizable()
-                  .aspectRatio(contentMode: .fill)
-                  .frame(width: 140, height: 140)
-                  .clipped()
-                  .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                      .stroke(Color.secondary, lineWidth: 2)
-                  )
-                  .cornerRadius(12)
-                  .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
-                  .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 4)
-              } else {
-                // Animated gradient border for active state with enhanced shadows
-                RotatingGradientBorderView(
-                  content: {
-                    Image(store.currentRunningGesture.imageName)
-                      .resizable()
-                      .aspectRatio(contentMode: .fill)
-                      .frame(width: 140, height: 140)
-                      .clipped()
-                      .cornerRadius(12)
-                  }
-                )
-                .shadow(color: .green.opacity(0.3), radius: 8, x: 0, y: 0)
-                .shadow(color: .black.opacity(0.25), radius: 12, x: 0, y: 6)
-                .shadow(color: .black.opacity(0.1), radius: 20, x: 0, y: 10)
-              }
-            }
-            .padding(12)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
-            .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 4)
-          }
-          .buttonStyle(.plain)
-          .scaleEffect(store.showInfoPopover ? 0.95 : 1.0)
-          .animation(.easeInOut(duration: 0.15), value: store.showInfoPopover)
-          .padding()
+          gestureStatusButton
         }
         .onAppear {
           // Set compact layout based on screen size
@@ -258,6 +172,7 @@ struct DashboardView: View {
     }
     .animation(.easeInOut(duration: 0.3), value: store.isDrawerOpen)
     .animation(.spring(response: 0.6, dampingFraction: 0.8, blendDuration: 0), value: store.showInfoPopover)
+    .animation(.easeInOut(duration: 0.4), value: store.currentRunningGesture)
   }
   
   @ViewBuilder
@@ -339,6 +254,39 @@ struct DashboardView: View {
         .foregroundColor(.primary)
     }
     .shadow(radius: 2)
+  }
+  
+  @ViewBuilder
+  private var gestureStatusButton: some View {
+    // Fixed status cell in bottom-right corner - unified structure
+    RotatingGradientBorderView(isActive: store.currentRunningGesture != .idle) {
+      Button(action: {
+        send(.showInfo(!store.showInfoPopover))
+      }) {
+        VStack(spacing: 8) {
+          Text(store.currentRunningGesture.displayName)
+            .font(.callout)
+            .fontWeight(.bold)
+            .foregroundColor(.primary)
+            .multilineTextAlignment(.center)
+            .lineLimit(2)
+            .frame(minHeight: 35)
+          
+          Image(store.currentRunningGesture.imageName)
+            .resizable()
+            .aspectRatio(contentMode: .fill)
+            .frame(width: 140, height: 140)
+            .clipped()
+            .cornerRadius(12)
+        }
+        .padding(12)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+      }
+      .buttonStyle(.plain)
+      .scaleEffect(store.showInfoPopover ? 0.95 : 1.0)
+      .animation(.easeInOut(duration: 0.15), value: store.showInfoPopover)
+    }
+    .padding()
   }
   
   
