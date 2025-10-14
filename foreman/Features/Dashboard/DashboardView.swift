@@ -18,12 +18,12 @@ enum GestureType: String, CaseIterable, Identifiable {
   case emergencyStop = "emergecy_stop"
   case extendBoom = "extend_boom"
   case followMe = "follow_me"
-  case idle = "idle"
+  case idle
   case loadLower = "load_lower"
   case lowerBoom = "lower_boom"
   case raiseBoom = "raise_boom"
   case retractBoom = "retract_boom"
-  case stop = "stop"
+  case stop
   case swingLeft = "swing_left"
   case swingRight = "swing_right"
   
@@ -49,7 +49,6 @@ enum GestureType: String, CaseIterable, Identifiable {
     return rawValue
   }
 }
-
 
 @ViewAction(for: DashboardFeature.self)
 struct DashboardView: View {
@@ -84,9 +83,9 @@ struct DashboardView: View {
           // Top drawer for monitoring panels (floating overlay) - on top of logo
           if store.isDrawerOpen {
             monitoringDrawer
-              .containerRelativeFrame(.vertical) { length, axis in
+              .containerRelativeFrame(.vertical) { length, _ in
                 // 根據螢幕高度動態調整 drawer 高度
-                return store.isMiniMode ? min(80, length * 0.15) : min(300, length * 0.6)
+                store.isMiniMode ? min(80, length * 0.15) : min(300, length * 0.6)
               }
               .transition(.move(edge: .top).combined(with: .opacity))
           }
@@ -97,9 +96,9 @@ struct DashboardView: View {
             // Dynamic top spacing based on drawer state
             if store.isDrawerOpen {
               Spacer()
-                .containerRelativeFrame(.vertical) { length, axis in
+                .containerRelativeFrame(.vertical) { length, _ in
                   // 對應 drawer 的動態高度
-                  return store.isMiniMode ? min(80, length * 0.15) : min(300, length * 0.6)
+                  store.isMiniMode ? min(80, length * 0.15) : min(300, length * 0.6)
                 }
             }
             
@@ -116,7 +115,7 @@ struct DashboardView: View {
                   }
                   .padding(.horizontal, 12)
                   .padding(.vertical, 8)
-                  .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+                  .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
                   .foregroundColor(.primary)
                   .buttonStyle(.plain)
                   .shadow(radius: 2)
@@ -137,9 +136,9 @@ struct DashboardView: View {
           // Bottom drawer for gesture gallery
           if store.showInfoPopover {
             gestureGalleryDrawer
-              .containerRelativeFrame(.vertical) { length, axis in
+              .containerRelativeFrame(.vertical) { length, _ in
                 // Dynamic height based on screen size
-                return min(200, length * 0.25)
+                min(200, length * 0.25)
               }
               .transition(
                 .asymmetric(
@@ -215,7 +214,7 @@ struct DashboardView: View {
       }
       .padding(.horizontal, 12)
       .padding(.vertical, 8)
-      .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+      .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
       .foregroundColor(.primary)
     }
     .buttonStyle(.plain)
@@ -250,7 +249,7 @@ struct DashboardView: View {
         .font(.system(size: 16, weight: .medium))
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
         .foregroundColor(.primary)
     }
     .shadow(radius: 2)
@@ -280,7 +279,7 @@ struct DashboardView: View {
             .cornerRadius(12)
         }
         .padding(12)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
       }
       .buttonStyle(.plain)
       .scaleEffect(store.showInfoPopover ? 0.95 : 1.0)
@@ -288,7 +287,6 @@ struct DashboardView: View {
     }
     .padding()
   }
-  
   
   @ViewBuilder
   private var monitoringDrawer: some View {
@@ -305,17 +303,29 @@ struct DashboardView: View {
                   action: \.sensorNodeStatus
                 )
               )
-              .containerRelativeFrame(.horizontal) { length, axis in
+              .containerRelativeFrame(.horizontal) { length, _ in
                 // 響應式調整 sensor 狀態視圖寬度
-                return min(300, max(200, length * 0.3))
+                min(300, max(200, length * 0.3))
+              }
+              
+              // 3D Model Viewer
+              ThreeDModelView(
+                store: store.scope(
+                  state: \.threeDModelViewer,
+                  action: \.threeDModelViewer
+                )
+              )
+              .containerRelativeFrame(.horizontal) { length, _ in
+                // 根據可用寬度調整3D模型查看器寬度
+                store.isMiniMode ? 200 : min(300, length * 0.25)
               }
               
               // 動態生成所有 ifstat 監控項目
               ForEach(store.scope(state: \.monitoringItems, action: \.monitoringItems)) { itemStore in
                 IfstatView(store: itemStore)
-                  .containerRelativeFrame(.horizontal) { length, axis in
+                  .containerRelativeFrame(.horizontal) { length, _ in
                     // 根據可用寬度調整監控項目寬度
-                    return store.isMiniMode ? 200 : min(300, length * 0.25)
+                    store.isMiniMode ? 200 : min(300, length * 0.25)
                   }
               }
             }
@@ -333,17 +343,29 @@ struct DashboardView: View {
                   action: \.sensorNodeStatus
                 )
               )
-              .containerRelativeFrame(.horizontal) { length, axis in
+              .containerRelativeFrame(.horizontal) { length, _ in
                 // 響應式調整 sensor 狀態視圖寬度
-                return min(300, max(200, length * 0.3))
+                min(300, max(200, length * 0.3))
+              }
+              
+              // 3D Model Viewer
+              ThreeDModelView(
+                store: store.scope(
+                  state: \.threeDModelViewer,
+                  action: \.threeDModelViewer
+                )
+              )
+              .containerRelativeFrame(.horizontal) { length, _ in
+                // 根據可用寬度調整3D模型查看器寬度
+                store.isMiniMode ? 200 : min(300, length * 0.25)
               }
               
               // 動態生成所有 full-size 監控項目
               ForEach(store.scope(state: \.monitoringItems, action: \.monitoringItems)) { itemStore in
                 IfstatView(store: itemStore)
-                  .containerRelativeFrame(.horizontal) { length, axis in
+                  .containerRelativeFrame(.horizontal) { length, _ in
                     // 根據可用寬度調整監控項目寬度
-                    return store.isMiniMode ? 200 : min(300, length * 0.25)
+                    store.isMiniMode ? 200 : min(300, length * 0.25)
                   }
               }
             }
@@ -370,7 +392,6 @@ struct DashboardView: View {
     .background(Color(.systemGray6))
     .animation(.easeInOut(duration: 0.3), value: store.isMiniMode)
   }
-  
   
   @ViewBuilder
   private var gestureGalleryDrawer: some View {
@@ -401,7 +422,7 @@ struct DashboardView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
         .foregroundColor(.primary)
         .buttonStyle(.plain)
         .shadow(radius: 2)
@@ -465,7 +486,6 @@ struct DashboardView: View {
     return GestureType.allCases.filter { $0 != .idle }
   }
 }
-
 
 #Preview {
   DashboardView(

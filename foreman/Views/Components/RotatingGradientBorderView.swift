@@ -82,7 +82,7 @@ struct RotatingGradientBorderView<Content: View>: View {
           .cornerRadius(8)
       }
       .padding(16)
-      .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+      .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
     }
     
     Text("Animated Border (Active)")
@@ -100,7 +100,7 @@ struct RotatingGradientBorderView<Content: View>: View {
           .cornerRadius(8)
       }
       .padding(16)
-      .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+      .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
     }
   }
   .padding()

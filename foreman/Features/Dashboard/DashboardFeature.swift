@@ -61,6 +61,12 @@ struct DashboardFeature {
       SensorNodeStatus(name: "jib_sensor_node", status: .disconnected)
     ], isMiniMode: true)
     
+    // 3D model viewer
+    var threeDModelViewer: ThreeDModelFeature.State = .init(
+      displayName: "3D Model Viewer",
+      isMiniMode: true
+    )
+    
     // Drawer state
     var isDrawerOpen: Bool = false
     var drawerWidth: CGFloat = 350
@@ -117,6 +123,7 @@ struct DashboardFeature {
     case directVideoCall(DirectVideoCallFeature.Action)
     case monitoringItems(IdentifiedActionOf<IfstatFeature>)
     case sensorNodeStatus(SensorNodeStatusFeature.Action)
+    case threeDModelViewer(ThreeDModelFeature.Action)
     
     @CasePathable
     enum ViewAction: Equatable {
@@ -159,6 +166,10 @@ struct DashboardFeature {
       SensorNodeStatusFeature()
     }
     
+    Scope(state: \.threeDModelViewer, action: \.threeDModelViewer) {
+      ThreeDModelFeature()
+    }
+    
     Reduce(core)
       .forEach(\.monitoringItems, action: \.monitoringItems) {
         IfstatFeature()
@@ -184,7 +195,9 @@ struct DashboardFeature {
       return .merge([
         .send(.directVideoCall(.view(.task))),
         .send(.sensorNodeStatus(.view(.task))),
-        .send(.sensorNodeStatus(.view(.setMiniMode(state.isMiniMode))))
+        .send(.sensorNodeStatus(.view(.setMiniMode(state.isMiniMode)))),
+        .send(.threeDModelViewer(.view(.task))),
+        .send(.threeDModelViewer(.view(.setMiniMode(state.isMiniMode))))
       ] + monitoringEffects + syncMiniModeEffects)
       
     case .view(.toggleDrawer):
@@ -220,7 +233,8 @@ struct DashboardFeature {
       }
       
       return .merge(syncEffects + [
-        .send(.sensorNodeStatus(.view(.setMiniMode(state.isMiniMode))))
+        .send(.sensorNodeStatus(.view(.setMiniMode(state.isMiniMode)))),
+        .send(.threeDModelViewer(.view(.setMiniMode(state.isMiniMode))))
       ])
       
     case .view(.setMiniMode(let isMini)):
@@ -232,7 +246,8 @@ struct DashboardFeature {
       }
       
       return .merge(syncEffects + [
-        .send(.sensorNodeStatus(.view(.setMiniMode(isMini))))
+        .send(.sensorNodeStatus(.view(.setMiniMode(isMini)))),
+        .send(.threeDModelViewer(.view(.setMiniMode(isMini))))
       ])
       
     case .view(.showInfo(let show)):
@@ -273,7 +288,8 @@ struct DashboardFeature {
       }
       
       return .merge(teardownEffects + [
-        .send(.sensorNodeStatus(.view(.teardown)))
+        .send(.sensorNodeStatus(.view(.teardown))),
+        .send(.threeDModelViewer(.view(.teardown)))
       ])
       
     case ._internal(.updateDrawerState):
@@ -299,8 +315,15 @@ struct DashboardFeature {
       logger.info("🟢 DashboardFeature: Sensor status updated")
       return .send(.delegate(.dataUpdated))
       
+    case .threeDModelViewer(.delegate(.modelLoaded(let model))):
+      logger.info("🎬 DashboardFeature: 3D model loaded: \(model.name)")
+      return .send(.delegate(.dataUpdated))
+      
+    case .threeDModelViewer(.delegate(.loadingStateChanged)):
+      return .send(.delegate(.dataUpdated))
+      
     // Pass through child feature actions
-    case .directVideoCall, .monitoringItems, .sensorNodeStatus:
+    case .directVideoCall, .monitoringItems, .sensorNodeStatus, .threeDModelViewer:
       return .none
     }
   }
