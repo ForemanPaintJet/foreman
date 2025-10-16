@@ -114,7 +114,7 @@ extension ThreeDAssetClient: DependencyKey {
   )
 }
 
-enum ThreeDAssetError: Error, LocalizedError {
+enum ThreeDAssetError: Error, LocalizedError, Equatable {
   case fileNotFound
   case invalidFormat
   case accessDenied

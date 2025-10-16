@@ -35,7 +35,7 @@ struct ThreeDModelView: View {
   }
   
   @ViewBuilder
-  private var miniModeView: View {
+  private var miniModeView: some View {
     RoundedRectangle(cornerRadius: 12)
       .fill(.ultraThinMaterial)
       .frame(height: 120)
@@ -57,7 +57,7 @@ struct ThreeDModelView: View {
   }
   
   @ViewBuilder
-  private var fullModeView: View {
+  private var fullModeView: some View {
     VStack(spacing: 16) {
       header
       
@@ -77,7 +77,7 @@ struct ThreeDModelView: View {
   }
   
   @ViewBuilder
-  private var fullScreenView: View {
+  private var fullScreenView: some View {
     NavigationStack {
       VStack(spacing: 0) {
         if let model = store.currentModel {
@@ -120,7 +120,7 @@ struct ThreeDModelView: View {
   }
   
   @ViewBuilder
-  private var header: View {
+  private var header: some View {
     HStack {
       VStack(alignment: .leading, spacing: 4) {
         Text(store.displayName)
@@ -141,7 +141,7 @@ struct ThreeDModelView: View {
   }
   
   @ViewBuilder
-  private var statusIndicator: View {
+  private var statusIndicator: some View {
     Group {
       switch store.loadingState {
       case .idle:
@@ -227,7 +227,7 @@ struct ThreeDModelView: View {
   }
   
   @ViewBuilder
-  private var emptyStateView: View {
+  private var emptyStateView: some View {
     VStack(spacing: 16) {
       Image(systemName: "cube.transparent")
         .font(.system(size: 48))
@@ -251,7 +251,7 @@ struct ThreeDModelView: View {
   }
   
   @ViewBuilder
-  private var controlsView: View {
+  private var controlsView: some View {
     HStack(spacing: 16) {
       Button("Import Model") {
         send(.showFilePicker(true))

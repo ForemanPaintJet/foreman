@@ -65,10 +65,10 @@ struct SceneKitView: UIViewRepresentable {
     }
   }
   
-  private func setupDefaultCamera(in scene: SCNScene) {
+  private func setupDefaultCamera(in scene: SCNScene, distance: Float = 3) {
     let cameraNode = SCNNode()
     cameraNode.camera = SCNCamera()
-    cameraNode.position = SCNVector3(x: 0, y: 0, z: 3)
+    cameraNode.position = SCNVector3(x: 0, y: 0, z: distance)
     scene.rootNode.addChildNode(cameraNode)
   }
   
@@ -112,34 +112,47 @@ struct SceneKitView: UIViewRepresentable {
   }
   
   private func centerAndScaleModel(scene: SCNScene) {
-    let (min, max) = scene.rootNode.boundingBox
-    
+    // Create a container node for all model nodes (excluding camera)
+    let modelContainer = SCNNode()
+
+    // Move all non-camera nodes to container
+    let nodesToMove = scene.rootNode.childNodes.filter { $0.camera == nil }
+    for node in nodesToMove {
+      node.removeFromParentNode()
+      modelContainer.addChildNode(node)
+    }
+
+    // Add container to scene
+    scene.rootNode.addChildNode(modelContainer)
+
+    // Calculate bounding box of model container
+    let (min, max) = modelContainer.boundingBox
+
     // Calculate center and size
     let center = SCNVector3(
       x: (min.x + max.x) / 2,
       y: (min.y + max.y) / 2,
       z: (min.z + max.z) / 2
     )
-    
+
     let size = SCNVector3(
       x: max.x - min.x,
       y: max.y - min.y,
       z: max.z - min.z
     )
-    
+
     // Calculate maximum dimension for scaling
-    let maxDimension = max(size.x, max(size.y, size.z))
-    
-    // Scale to fit in a unit cube if needed
-    if maxDimension > 2.0 {
-      let scale = 2.0 / maxDimension
-      scene.rootNode.scale = SCNVector3(scale, scale, scale)
-    }
-    
-    // Center the model
-    scene.rootNode.position = SCNVector3(-center.x, -center.y, -center.z)
-    
-    logger.info("🎯 Model centered and scaled - Size: \(maxDimension), Scale: \(scene.rootNode.scale)")
+    let maxDimension = Swift.max(size.x, Swift.max(size.y, size.z))
+
+    // Scale to fit nicely in view (target size of 2 units)
+    let targetSize: Float = 2.0
+    let scale = targetSize / maxDimension
+    modelContainer.scale = SCNVector3(scale, scale, scale)
+
+    // Center the model container
+    modelContainer.position = SCNVector3(-center.x * scale, -center.y * scale, -center.z * scale)
+
+    logger.info("🎯 Model centered and scaled - Size: \(maxDimension), Scale: \(scale)")
   }
   
   private func showErrorPlaceholder(in scene: SCNScene) {
@@ -167,4 +180,25 @@ struct SceneKitView: UIViewRepresentable {
 #Preview("SceneKit View - With Background") {
   SceneKitView(backgroundColor: .blue.opacity(0.1))
     .frame(width: 300, height: 200)
+}
+
+#Preview("SceneKit View - Base Telescope") {
+  let previewModel: ThreeDModel? = {
+    guard let url = Bundle.main.url(forResource: "base_telescope_old", withExtension: "dae") else {
+      return nil
+    }
+    return ThreeDModel(
+      name: "Base Telescope",
+      url: url,
+      fileSize: 1420680,
+      createdDate: Date()
+    )
+  }()
+
+  return SceneKitView(
+    model: previewModel,
+    backgroundColor: .black.opacity(0.8),
+    isInteractionEnabled: true
+  )
+  .frame(width: 400, height: 300)
 }

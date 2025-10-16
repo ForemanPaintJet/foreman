@@ -116,8 +116,14 @@ struct ThreeDModelFeature {
       
       return .run { send in
         @Dependency(\.threeDAssetClient) var assetClient
-        let result = await Result {
-          try await assetClient.loadBundleModel(filename)
+        let result: Result<ThreeDModel, ThreeDAssetError>
+        do {
+          let model = try await assetClient.loadBundleModel(filename)
+          result = .success(model)
+        } catch let error as ThreeDAssetError {
+          result = .failure(error)
+        } catch {
+          result = .failure(.loadingFailed(error.localizedDescription))
         }
         await send(._internal(.bundleModelLoadingResult(result)))
       }

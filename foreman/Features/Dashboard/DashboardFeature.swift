@@ -197,7 +197,8 @@ struct DashboardFeature {
         .send(.sensorNodeStatus(.view(.task))),
         .send(.sensorNodeStatus(.view(.setMiniMode(state.isMiniMode)))),
         .send(.threeDModelViewer(.view(.task))),
-        .send(.threeDModelViewer(.view(.setMiniMode(state.isMiniMode))))
+        .send(.threeDModelViewer(.view(.setMiniMode(state.isMiniMode)))),
+        .send(.threeDModelViewer(.view(.loadBundleModel("base_telescope_old"))))
       ] + monitoringEffects + syncMiniModeEffects)
       
     case .view(.toggleDrawer):
