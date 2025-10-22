@@ -10,6 +10,16 @@ import OSLog
 import Dependencies
 import SwiftUI
 import UniformTypeIdentifiers
+import SceneKit
+
+struct SceneWrapper: Equatable {
+  let id = UUID()
+  let scene: SCNScene
+
+  static func == (lhs: SceneWrapper, rhs: SceneWrapper) -> Bool {
+    lhs.id == rhs.id
+  }
+}
 
 @Reducer
 struct ThreeDModelFeature {
@@ -23,21 +33,19 @@ struct ThreeDModelFeature {
     var showFilePicker: Bool = false
     var recentModels: [ThreeDModel] = []
     var showFullScreen: Bool = false
-    
+
     // Camera control state
     var backgroundColor: Color = .black.opacity(0.8)
     var isInteractionEnabled: Bool = true
-    
+
+    // Scene state
+    var loadedScene: SceneWrapper?
+
     enum LoadingState: Equatable {
       case idle
       case loading
       case loaded
       case error(String)
-    }
-    
-    init(displayName: String = "3D Model Viewer", isMiniMode: Bool = true) {
-      self.displayName = displayName
-      self.isMiniMode = isMiniMode
     }
   }
   
@@ -65,6 +73,7 @@ struct ThreeDModelFeature {
     enum InternalAction: Equatable {
       case modelLoadingResult(Result<ThreeDModel, ThreeDAssetError>)
       case bundleModelLoadingResult(Result<ThreeDModel, ThreeDAssetError>)
+      case sceneBuilt(SceneWrapper?)
     }
     
     @CasePathable
@@ -132,7 +141,7 @@ struct ThreeDModelFeature {
       state.loadingState = .loading
       state.currentModel = model
       logger.info("🔄 3DModelFeature: Loading model: \(model.name)")
-      
+
       // Add to recent models if not already there
       if !state.recentModels.contains(where: { $0.id == model.id }) {
         state.recentModels.insert(model, at: 0)
@@ -141,16 +150,14 @@ struct ThreeDModelFeature {
           state.recentModels = Array(state.recentModels.prefix(5))
         }
       }
-      
-      state.loadingState = .loaded
-      return .merge([
-        .send(.delegate(.modelLoaded(model))),
-        .send(.delegate(.loadingStateChanged(.loaded)))
-      ])
+
+      // Build scene from model
+      return buildScene(from: model)
       
     case .view(.clearModel):
       logger.info("🗑️ 3DModelFeature: Clearing current model")
       state.currentModel = nil
+      state.loadedScene = nil
       state.loadingState = .idle
       return .send(.delegate(.loadingStateChanged(.idle)))
       
@@ -198,11 +205,102 @@ struct ThreeDModelFeature {
       let errorMessage = error.localizedDescription
       state.loadingState = .error(errorMessage)
       logger.error("❌ 3DModelFeature: Bundle model loading failed: \(errorMessage)")
-      
+
       return .send(.delegate(.loadingStateChanged(.error(errorMessage))))
-      
+
+    case ._internal(.sceneBuilt(let scene)):
+      state.loadedScene = scene
+      if let scene = scene {
+        state.loadingState = .loaded
+        logger.info("✅ 3DModelFeature: Scene built successfully")
+        return .merge([
+          .send(.delegate(.loadingStateChanged(.loaded)))
+        ])
+      } else {
+        let errorMessage = "Failed to build scene"
+        state.loadingState = .error(errorMessage)
+        logger.error("❌ 3DModelFeature: Scene building failed")
+        return .send(.delegate(.loadingStateChanged(.error(errorMessage))))
+      }
+
     case .delegate:
       return .none
     }
+  }
+
+  // MARK: - Scene Building
+
+  private func buildScene(from model: ThreeDModel) -> Effect<Action> {
+    return .run { send in
+      let scene = await Task.detached {
+        Self.createScene(from: model)
+      }.value
+
+      await send(._internal(.sceneBuilt(scene)))
+    }
+  }
+
+  static func createScene(from model: ThreeDModel) -> SceneWrapper? {
+    let scene = SCNScene()
+
+    // Setup camera
+    let cameraNode = SCNNode()
+    cameraNode.camera = SCNCamera()
+    cameraNode.position = SCNVector3(x: 0, y: 0, z: 3)
+    scene.rootNode.addChildNode(cameraNode)
+
+    // Load model
+    do {
+      let modelScene = try SCNScene(url: model.url, options: [
+        SCNSceneSource.LoadingOption.animationImportPolicy: SCNSceneSource.AnimationImportPolicy.playRepeatedly,
+        SCNSceneSource.LoadingOption.checkConsistency: true
+      ])
+
+      // Add model nodes
+      for childNode in modelScene.rootNode.childNodes {
+        scene.rootNode.addChildNode(childNode)
+      }
+
+      // Center and scale model
+      centerAndScaleModel(scene: scene)
+
+      return SceneWrapper(scene: scene)
+    } catch {
+      Logger(subsystem: "foreman", category: "3DModelFeature")
+        .error("❌ Failed to load 3D model: \(error.localizedDescription)")
+      return nil
+    }
+  }
+
+  static func centerAndScaleModel(scene: SCNScene) {
+    let modelContainer = SCNNode()
+
+    let nodesToMove = scene.rootNode.childNodes.filter { $0.camera == nil }
+    for node in nodesToMove {
+      node.removeFromParentNode()
+      modelContainer.addChildNode(node)
+    }
+
+    scene.rootNode.addChildNode(modelContainer)
+
+    let (min, max) = modelContainer.boundingBox
+
+    let center = SCNVector3(
+      x: (min.x + max.x) / 2,
+      y: (min.y + max.y) / 2,
+      z: (min.z + max.z) / 2
+    )
+
+    let size = SCNVector3(
+      x: max.x - min.x,
+      y: max.y - min.y,
+      z: max.z - min.z
+    )
+
+    let maxDimension = Swift.max(size.x, Swift.max(size.y, size.z))
+    let targetSize: Float = 2.0
+    let scale = targetSize / maxDimension
+    modelContainer.scale = SCNVector3(scale, scale, scale)
+    modelContainer.position = SCNVector3(-center.x * scale, -center.y * scale, -center.z * scale)
   }
 }

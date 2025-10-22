@@ -9,6 +9,7 @@ import SwiftUI
 import ComposableArchitecture
 import UniformTypeIdentifiers
 import OSLog
+import SceneKit
 
 @ViewAction(for: ThreeDModelFeature.self)
 struct ThreeDModelView: View {
@@ -79,12 +80,19 @@ struct ThreeDModelView: View {
   @ViewBuilder
   private var fullScreenView: some View {
     NavigationStack {
-      VStack(spacing: 0) {
-        if let model = store.currentModel {
-          SceneKitView(
-            model: model,
-            backgroundColor: store.backgroundColor,
-            isInteractionEnabled: store.isInteractionEnabled
+      ZStack {
+        store.backgroundColor
+          .ignoresSafeArea()
+
+        if let sceneWrapper = store.loadedScene {
+          SceneView(
+            scene: sceneWrapper.scene,
+            pointOfView: nil,
+            options: store.isInteractionEnabled ? [.allowsCameraControl, .autoenablesDefaultLighting] : [.autoenablesDefaultLighting],
+            preferredFramesPerSecond: 60,
+            antialiasingMode: .multisampling2X,
+            delegate: nil,
+            technique: nil
           )
         } else {
           emptyStateView
@@ -99,13 +107,13 @@ struct ThreeDModelView: View {
             send(.showFullScreen(false))
           }
         }
-        
+
         ToolbarItem(placement: .topBarTrailing) {
           Menu {
             Button("Import Model") {
               send(.showFilePicker(true))
             }
-            
+
             if store.currentModel != nil {
               Button("Clear Model", role: .destructive) {
                 send(.clearModel)
@@ -166,11 +174,21 @@ struct ThreeDModelView: View {
   
   @ViewBuilder
   private func modelThumbnailView(_ model: ThreeDModel) -> some View {
-    SceneKitView(
-      model: model,
-      backgroundColor: .clear,
-      isInteractionEnabled: false
-    )
+    Group {
+      if let sceneWrapper = store.loadedScene {
+        SceneView(
+          scene: sceneWrapper.scene,
+          pointOfView: nil,
+          options: [.autoenablesDefaultLighting],
+          preferredFramesPerSecond: 30,
+          antialiasingMode: .multisampling2X,
+          delegate: nil,
+          technique: nil
+        )
+      } else {
+        Color.clear
+      }
+    }
     .clipShape(RoundedRectangle(cornerRadius: 8))
     .overlay {
       LinearGradient(
@@ -184,7 +202,7 @@ struct ThreeDModelView: View {
         Text(model.name)
           .font(.caption.bold())
           .foregroundStyle(.white)
-        
+
         Text(formatFileSize(model.fileSize))
           .font(.caption2)
           .foregroundStyle(.white.opacity(0.8))
@@ -196,13 +214,26 @@ struct ThreeDModelView: View {
   @ViewBuilder
   private func modelDisplayView(_ model: ThreeDModel) -> some View {
     VStack(spacing: 12) {
-      SceneKitView(
-        model: model,
-        backgroundColor: store.backgroundColor,
-        isInteractionEnabled: store.isInteractionEnabled
-      )
+      ZStack {
+        store.backgroundColor
+          .ignoresSafeArea()
+
+        if let sceneWrapper = store.loadedScene {
+          SceneView(
+            scene: sceneWrapper.scene,
+            pointOfView: nil,
+            options: store.isInteractionEnabled ? [.allowsCameraControl, .autoenablesDefaultLighting] : [.autoenablesDefaultLighting],
+            preferredFramesPerSecond: 60,
+            antialiasingMode: .multisampling2X,
+            delegate: nil,
+            technique: nil
+          )
+        } else {
+          ProgressView()
+        }
+      }
       .clipShape(RoundedRectangle(cornerRadius: 12))
-      
+
       HStack(spacing: 16) {
         VStack(alignment: .leading, spacing: 4) {
           Text("File Size")
@@ -211,9 +242,9 @@ struct ThreeDModelView: View {
           Text(formatFileSize(model.fileSize))
             .font(.caption.bold())
         }
-        
+
         Spacer()
-        
+
         VStack(alignment: .trailing, spacing: 4) {
           Text("Created")
             .font(.caption)
@@ -300,6 +331,36 @@ struct ThreeDModelView: View {
     formatter.countStyle = .file
     return formatter.string(fromByteCount: bytes)
   }
+}
+
+#Preview("3D Model View") {
+  let previewModel: ThreeDModel? = {
+    guard let url = Bundle.main.url(forResource: "toy_biplane_realistic", withExtension: "usdz") else {
+      return nil
+    }
+    return ThreeDModel(
+      name: "Toy Biplane",
+      url: url,
+      fileSize: 1420680,
+      createdDate: Date()
+    )
+  }()
+
+  ThreeDModelView(
+    store: Store(
+      initialState: ThreeDModelFeature.State(
+        displayName: "3D Model Viewer",
+        isMiniMode: false,
+        currentModel: previewModel,
+        loadingState: .loaded,
+        loadedScene: previewModel.flatMap { ThreeDModelFeature.createScene(from: $0) }
+      )
+    ) {
+      ThreeDModelFeature()
+    }
+  )
+  .padding()
+  .frame(width: 400, height: 600)
 }
 
 #Preview("3D Model View - Mini Mode") {
