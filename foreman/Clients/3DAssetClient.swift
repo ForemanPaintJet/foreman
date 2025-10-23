@@ -13,8 +13,12 @@ import OSLog
 struct ThreeDAssetClient {
   var loadModel: @Sendable (URL) async throws -> ThreeDModel
   var loadBundleModel: @Sendable (String) async throws -> ThreeDModel
+  var loadModelUSDZ: @Sendable (URL) async throws -> ThreeDModel
+  var loadBundleModelUSDZ: @Sendable (String) async throws -> ThreeDModel
   var validateFile: @Sendable (URL) -> Bool
+  var validateFileUSDZ: @Sendable (URL) -> Bool
   var getSupportedTypes: @Sendable () -> [UTType]
+  var getSupportedTypesUSDZ: @Sendable () -> [UTType]
 }
 
 struct ThreeDModel: Equatable, Sendable {
@@ -33,24 +37,24 @@ extension ThreeDAssetClient: DependencyKey {
   static let liveValue = ThreeDAssetClient(
     loadModel: { url in
       let logger = Logger(subsystem: "foreman", category: "3DAssetClient")
-      
+
       guard url.startAccessingSecurityScopedResource() else {
         logger.error("🚫 Failed to access security scoped resource: \(url.path)")
         throw ThreeDAssetError.accessDenied
       }
       defer { url.stopAccessingSecurityScopedResource() }
-      
+
       guard FileManager.default.fileExists(atPath: url.path) else {
         logger.error("📁 File does not exist: \(url.path)")
         throw ThreeDAssetError.fileNotFound
       }
-      
+
       let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
       let fileSize = attributes[.size] as? Int64 ?? 0
       let createdDate = attributes[.creationDate] as? Date ?? Date()
-      
-      logger.info("📦 Loading 3D model: \(url.lastPathComponent) (\(fileSize) bytes)")
-      
+
+      logger.info("📦 Loading 3D model (DAE): \(url.lastPathComponent) (\(fileSize) bytes)")
+
       return ThreeDModel(
         name: url.deletingPathExtension().lastPathComponent,
         url: url,
@@ -58,21 +62,21 @@ extension ThreeDAssetClient: DependencyKey {
         createdDate: createdDate
       )
     },
-    
+
     loadBundleModel: { filename in
       let logger = Logger(subsystem: "foreman", category: "3DAssetClient")
-      
+
       guard let url = Bundle.main.url(forResource: filename, withExtension: "dae") else {
         logger.error("🚫 Bundle model not found: \(filename).dae")
         throw ThreeDAssetError.fileNotFound
       }
-      
+
       let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
       let fileSize = attributes[.size] as? Int64 ?? 0
       let createdDate = attributes[.creationDate] as? Date ?? Date()
-      
-      logger.info("📦 Loading bundle 3D model: \(filename).dae")
-      
+
+      logger.info("📦 Loading bundle 3D model (DAE): \(filename).dae")
+
       return ThreeDModel(
         name: filename,
         url: url,
@@ -80,15 +84,75 @@ extension ThreeDAssetClient: DependencyKey {
         createdDate: createdDate
       )
     },
-    
+
+    loadModelUSDZ: { url in
+      let logger = Logger(subsystem: "foreman", category: "3DAssetClient")
+
+      guard url.startAccessingSecurityScopedResource() else {
+        logger.error("🚫 Failed to access security scoped resource: \(url.path)")
+        throw ThreeDAssetError.accessDenied
+      }
+      defer { url.stopAccessingSecurityScopedResource() }
+
+      guard FileManager.default.fileExists(atPath: url.path) else {
+        logger.error("📁 File does not exist: \(url.path)")
+        throw ThreeDAssetError.fileNotFound
+      }
+
+      let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+      let fileSize = attributes[.size] as? Int64 ?? 0
+      let createdDate = attributes[.creationDate] as? Date ?? Date()
+
+      logger.info("📦 Loading 3D model (USDZ): \(url.lastPathComponent) (\(fileSize) bytes)")
+
+      return ThreeDModel(
+        name: url.deletingPathExtension().lastPathComponent,
+        url: url,
+        fileSize: fileSize,
+        createdDate: createdDate
+      )
+    },
+
+    loadBundleModelUSDZ: { filename in
+      let logger = Logger(subsystem: "foreman", category: "3DAssetClient")
+
+      guard let url = Bundle.main.url(forResource: filename, withExtension: "usdz") else {
+        logger.error("🚫 Bundle model not found: \(filename).usdz")
+        throw ThreeDAssetError.fileNotFound
+      }
+
+      let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+      let fileSize = attributes[.size] as? Int64 ?? 0
+      let createdDate = attributes[.creationDate] as? Date ?? Date()
+
+      logger.info("📦 Loading bundle 3D model (USDZ): \(filename).usdz")
+
+      return ThreeDModel(
+        name: filename,
+        url: url,
+        fileSize: fileSize,
+        createdDate: createdDate
+      )
+    },
+
     validateFile: { url in
       let supportedExtensions = ["dae", "DAE"]
       let fileExtension = url.pathExtension
       return supportedExtensions.contains(fileExtension)
     },
-    
+
+    validateFileUSDZ: { url in
+      let supportedExtensions = ["usdz", "USDZ"]
+      let fileExtension = url.pathExtension
+      return supportedExtensions.contains(fileExtension)
+    },
+
     getSupportedTypes: {
       [UTType(filenameExtension: "dae") ?? UTType.data]
+    },
+
+    getSupportedTypesUSDZ: {
+      [.usdz]
     }
   )
   
@@ -109,8 +173,26 @@ extension ThreeDAssetClient: DependencyKey {
         createdDate: Date()
       )
     },
+    loadModelUSDZ: { url in
+      ThreeDModel(
+        name: "TestModelUSDZ",
+        url: url,
+        fileSize: 1024,
+        createdDate: Date()
+      )
+    },
+    loadBundleModelUSDZ: { filename in
+      ThreeDModel(
+        name: filename,
+        url: Bundle.main.bundleURL,
+        fileSize: 2048,
+        createdDate: Date()
+      )
+    },
     validateFile: { _ in true },
-    getSupportedTypes: { [UTType.data] }
+    validateFileUSDZ: { _ in true },
+    getSupportedTypes: { [UTType.data] },
+    getSupportedTypesUSDZ: { [.usdz] }
   )
 }
 
