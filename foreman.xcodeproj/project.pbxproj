@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		413141572EAF4287005F2C35 /* TestRealityKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 413141562EAF4287005F2C35 /* TestRealityKit.swift */; };
 		4143EAAB2E574BA90063D0EA /* WebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = 4143EAAA2E574BA90063D0EA /* WebRTC */; };
 		4166AF712E6571D60030F8BD /* MqttClientKit in Frameworks */ = {isa = PBXBuildFile; productRef = 4166AF702E6571D60030F8BD /* MqttClientKit */; };
 		4166AF732E6571D60030F8BD /* MqttFeatures in Frameworks */ = {isa = PBXBuildFile; productRef = 4166AF722E6571D60030F8BD /* MqttFeatures */; };
@@ -33,6 +34,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		413141562EAF4287005F2C35 /* TestRealityKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestRealityKit.swift; sourceTree = "<group>"; };
 		41A1FB7A2E16AF3200A9EDA5 /* foreman.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = foreman.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		41A1FB882E16AF3500A9EDA5 /* foremanTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = foremanTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		41A1FB922E16AF3500A9EDA5 /* foremanUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = foremanUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -118,6 +120,7 @@
 				41A1FB952E16AF3500A9EDA5 /* foremanUITests */,
 				41B494552E16BA3900890E09 /* Frameworks */,
 				41A1FB7B2E16AF3200A9EDA5 /* Products */,
+				413141562EAF4287005F2C35 /* TestRealityKit.swift */,
 			);
 			sourceTree = "<group>";
 		};
@@ -295,6 +298,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				413141572EAF4287005F2C35 /* TestRealityKit.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

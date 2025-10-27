@@ -568,10 +568,6 @@ struct ThreeDModelRealityKitView: View {
   }
 }
 
-#Preview("TestRealityKit") {
-  TestRealityKit()
-}
-
 #Preview("RealityKit 3D Model View - Loaded") {
   let previewModel: ThreeDModel? = {
     guard let url = Bundle.main.url(forResource: "toy_biplane_realistic", withExtension: "usdz") else {
@@ -637,42 +633,4 @@ struct ThreeDModelRealityKitView: View {
   .frame(width: 400, height: 600)
 }
 
-struct TestRealityKit: View {
-    @State private var rotationY: Float = 0.0
-    @State private var scale: Float = 1.0
-    
-    let box = ModelEntity(mesh: .generateBox(size: 0.25))
-    let group = Entity()
-    
-    let ratio: Float = 0.005 // 旋轉靈敏度
-    
-    var drag: some Gesture {
-        DragGesture(minimumDistance: 0)
-            .onChanged { value in
-                // 水平拖曳 → Y 軸旋轉
-                rotationY += Float(value.translation.width) * ratio
-                group.orientation = simd_quatf(angle: rotationY, axis: [0,1,0])
-            }
-    }
-    
-    var pinch: some Gesture {
-        MagnificationGesture()
-            .onChanged { mag in
-                // 縮放限制在 0.5 ~ 2.0
-                scale = min(max(Float(mag), 0.5), 2.0)
-                group.scale = SIMD3(repeating: scale)
-            }
-    }
-    
-    var body: some View {
-        RealityView { rvc in
-            // 把 box 加入 group，再加到場景
-            let boxAnchor = try! Entity.load(named: "toy_biplane_realistic") // MyModel.usdz 放在專案資源
-            group.addChild(boxAnchor)
-//            group.addChild(box)
-            rvc.add(group)
-        }
-        // 同時支持拖曳旋轉 + 捏合縮放
-        .gesture(drag.simultaneously(with: pinch))
-    }
-}
+
