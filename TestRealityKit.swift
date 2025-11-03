@@ -9,7 +9,9 @@ import RealityKit
 import SwiftUI
 
 struct TestRealityKit: View {
+  @State private var rotationX: Float = 0.0
   @State private var rotationY: Float = 0.0
+  @State private var rotationZ: Float = 0.0
   @State private var scale: Float = 1.0
   @State private var currentScale: Float = 1.0
   let group = AnchorEntity()
@@ -25,6 +27,7 @@ struct TestRealityKit: View {
   @State private var tappedEntity: Entity?
   @State private var tapCoordinates: SIMD3<Float>?
   @State private var rootEntity: Entity?
+  @State private var highlightedEntities: Set<Entity> = []
 
   // 示範用的測試實體
   @State private var testEntityWithCollision: Entity?
@@ -32,13 +35,48 @@ struct TestRealityKit: View {
 
   // 旋轉靈敏度
   let ratio: Float = 0.005
+  
+  // 顏色數組為不同組件著色
+  let componentColors: [UIColor] = [
+    .red, .blue, .green, .orange, .purple, .cyan, .yellow, .magenta,
+    .brown, .systemPink, .systemIndigo, .systemTeal
+  ]
 
   var drag: some Gesture {
     DragGesture(minimumDistance: 10)
       .onChanged { value in
-        // 水平拖曳 → Y 軸旋轉
+        // 水平拖曳 → Y 軸旋轉（左右旋轉）- 無限制 0~360度
         rotationY += Float(value.translation.width) * ratio
-        group.orientation = simd_quatf(angle: rotationY, axis: [0, 1, 0])
+        
+        // 垂直拖曳 → X 軸旋轉（上下旋轉）
+        let newRotationX = rotationX + Float(value.translation.height) * ratio
+        // 限制 X 軸旋轉在 0~π/2 弧度（0~90度），避免看到底部
+        rotationX = max(0, min(Float.pi / 2, newRotationX))
+        
+        // 組合多軸旋轉
+        let rotationQuatX = simd_quatf(angle: rotationX, axis: [1, 0, 0])
+        let rotationQuatY = simd_quatf(angle: rotationY, axis: [0, 1, 0])
+        
+        // 先繞 Y 軸旋轉，再繞 X 軸旋轉
+        group.orientation = rotationQuatY * rotationQuatX
+      }
+  }
+  
+  // 新增：Z 軸旋轉手勢（兩指旋轉）
+  var rotation: some Gesture {
+    RotationGesture()
+      .onChanged { angle in
+        // 將 Angle 轉換為 Float 弧度並限制在 0~π 弧度（0~180度）
+        let newRotationZ = Float(angle.radians)
+        rotationZ = max(0, min(Float.pi, newRotationZ))
+        
+        // 組合所有軸的旋轉
+        let rotationQuatX = simd_quatf(angle: rotationX, axis: [1, 0, 0])
+        let rotationQuatY = simd_quatf(angle: rotationY, axis: [0, 1, 0])
+        let rotationQuatZ = simd_quatf(angle: rotationZ, axis: [0, 0, 1])
+        
+        // 按照 Y → X → Z 的順序組合旋轉
+        group.orientation = rotationQuatY * rotationQuatX * rotationQuatZ
       }
   }
 
@@ -56,7 +94,7 @@ struct TestRealityKit: View {
       .onChanged { mag in
         print("Pinch detected: \(mag)")
         let newScale = currentScale * Float(mag)
-        scale = min(max(newScale, 0.5), 2.0)
+        scale = min(max(newScale, 0.1), 5.0)
         print("New scale: \(scale)")
         group.scale = SIMD3(repeating: scale)
       }
@@ -165,6 +203,13 @@ struct TestRealityKit: View {
     print("🆔 實體ID: \(entity.id)")
     print("📍 座標: \(entity.position(relativeTo: nil))")
 
+    // 如果實體已經高亮，則取消高亮；否則高亮顯示
+    if highlightedEntities.contains(entity) {
+      resetEntityColor(entity)
+    } else {
+      highlightEntity(entity)
+    }
+
     tappedEntity = entity
     tapCoordinates = entity.position(relativeTo: nil)
 
@@ -248,6 +293,47 @@ struct TestRealityKit: View {
     }
   }
 
+  private func highlightEntity(_ entity: Entity) {
+    guard entity.components.has(ModelComponent.self) else { return }
+    guard var modelComponent = entity.components[ModelComponent.self] else { return }
+    
+    // 獲取一個隨機顏色來高亮顯示
+    let color = componentColors.randomElement() ?? .red
+    
+    // 創建高亮材質
+    var material = SimpleMaterial()
+    material.color = .init(tint: color, texture: nil)
+    material.metallic = 0.3
+    material.roughness = 0.5
+    
+    // 應用材質
+    modelComponent.materials = [material]
+    entity.components[ModelComponent.self] = modelComponent
+    
+    // 記錄已高亮的實體
+    highlightedEntities.insert(entity)
+    
+    print("🎨 高亮顯示組件 '\(entity.name.isEmpty ? "<unnamed>" : entity.name)' - 顏色: \(color)")
+  }
+  
+  private func resetEntityColor(_ entity: Entity) {
+    guard entity.components.has(ModelComponent.self) else { return }
+    guard var modelComponent = entity.components[ModelComponent.self] else { return }
+    
+    // 恢復到原始材質（移除顏色覆蓋）
+    var material = SimpleMaterial()
+    material.color = .init(tint: .white, texture: nil)
+    material.metallic = 0.1
+    material.roughness = 0.9
+    
+    modelComponent.materials = [material]
+    entity.components[ModelComponent.self] = modelComponent
+    
+    highlightedEntities.remove(entity)
+    
+    print("🔄 重置組件顏色 '\(entity.name.isEmpty ? "<unnamed>" : entity.name)'")
+  }
+
   private func configureEntityForTap(_ entity: Entity) {
     // 重要的命名實體清單 - 即使沒有 ModelComponent 也要配置點擊檢測
     let importantEntities = [
@@ -304,12 +390,16 @@ struct TestRealityKit: View {
       // 3D 模型檢視 - 佔據全螢幕接收手勢
       RealityView { rvc in
         do {
-          let loadedBiplane = try Entity.load(named: "toy_biplane_realistic")
+          let loadedBiplane = try Entity.load(named: "s60sj")
           biplane = loadedBiplane
 
+          // 縮小模型到適合 iPad 的尺寸（縮小到原來的 30%）
+          loadedBiplane.scale = SIMD3<Float>(repeating: 0.01)
+          
           // 先生成碰撞形狀
           loadedBiplane.generateCollisionShapes(recursive: true)
 
+          // 配置點擊檢測
 //          configureEntityForTap(loadedBiplane)
           // 再為所有有 CollisionComponent 的實體添加 InputTargetComponent
           configureInputTarget(loadedBiplane)
@@ -335,6 +425,7 @@ struct TestRealityKit: View {
         tap
           .simultaneously(with: drag)
           .simultaneously(with: pinch)
+          .simultaneously(with: rotation)
       )
 
       // UI 控制層 - 浮動在底部
@@ -372,6 +463,23 @@ struct TestRealityKit: View {
 
               Button("分析結構") {
                 printDetailedModelInfo()
+              }
+              .font(.caption)
+              .buttonStyle(.bordered)
+              
+              Button("清除高亮") {
+                for entity in highlightedEntities {
+                  resetEntityColor(entity)
+                }
+              }
+              .font(.caption)
+              .buttonStyle(.bordered)
+              
+              Button("重置旋轉") {
+                rotationX = 0.0
+                rotationY = 0.0
+                rotationZ = 0.0
+                group.orientation = simd_quatf(angle: 0, axis: [0, 1, 0])
               }
               .font(.caption)
               .buttonStyle(.bordered)
