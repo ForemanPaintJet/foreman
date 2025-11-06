@@ -217,12 +217,8 @@ struct TestRealityKit: View {
           handleEntityPress(value.entity)
         }
       }
-  }
-
-  var backgroundTap: some Gesture {
-    TapGesture()
       .onEnded { _ in
-        // 點擊空白處
+        handleEntityRelease()
       }
   }
 
@@ -700,14 +696,9 @@ struct TestRealityKit: View {
         }
       }
       .gesture(
-        // tap 和 backgroundTap 始終啟用
-        backgroundTap
-          .simultaneously(with: tap)
-//          // 只有在非聚焦狀態時才啟用 drag 和 pinch
+        tap
           .simultaneously(with: drag)
           .simultaneously(with: pinch)
-//          .simultaneously(with: isFocused ? AnyGesture(TapGesture()) : AnyGesture(drag))
-//          .simultaneously(with: isFocused ? AnyGesture(TapGesture()) : AnyGesture(pinch))
       ).border(.red)
 
       // 頂部狀態列
