@@ -13,6 +13,7 @@ struct TestRealityKit: View {
   @State private var rotationY: Float = 0.0
   @State private var scale: Float = 1.0
   @State private var currentScale: Float = 1.0
+  @State private var normalizedScale: Float = 1.0  // 標準化縮放（將模型縮放到 1m 基準）
   let group = AnchorEntity()
   @State private var biplane: Entity?
 
@@ -21,6 +22,16 @@ struct TestRealityKit: View {
   @State private var animationNames: [String] = []
   @State private var selectedAnimation: String = ""
   @State private var isPlaying: Bool = false
+
+  // base_telescope 控制
+  @State private var baseTelescope: Entity?
+  @State private var baseTelescopeRotation: Float = 0.0  // Yaw (左右旋轉)
+  @State private var baseTelescopeRotationX: Float = 0.0  // Pitch (上下抬頭)
+
+  // fly_telescope 控制
+  @State private var flyTelescope: Entity?
+  @State private var originalFlyTelescopeParent: Entity?
+  @State private var isFlyBoundToBase: Bool = false
 
   // 點擊檢測
   @State private var tappedEntity: Entity?
@@ -227,12 +238,17 @@ struct TestRealityKit: View {
       .onChanged { mag in
         print("Pinch detected: \(mag)")
         let newScale = currentScale * Float(mag)
+        // 限制用戶縮放在 0.1 ~ 5.0 之間
         scale = min(max(newScale, 0.1), 5.0)
-        print("New scale: \(scale)")
-        group.scale = SIMD3(repeating: scale)
+        print("User scale: \(scale)")
+
+        // 實際應用的縮放 = 標準化縮放 × 用戶縮放
+        let finalScale = normalizedScale * scale
+        print("Final scale applied: \(finalScale)")
+        group.scale = SIMD3(repeating: finalScale)
       }
       .onEnded { _ in
-        print("Pinch ended, final scale: \(scale)")
+        print("Pinch ended, user scale: \(scale)")
         currentScale = scale
       }
   }
@@ -327,6 +343,187 @@ struct TestRealityKit: View {
     for child in entity.children {
       findAllModelEntities(in: child, results: &results)
     }
+  }
+
+  // 根據名稱查找實體（遞迴搜尋）
+  private func findEntityByName(_ name: String, in entity: Entity) -> Entity? {
+    // 檢查當前實體
+    if entity.name == name {
+      return entity
+    }
+
+    // 遞迴搜尋子實體
+    for child in entity.children {
+      if let found = findEntityByName(name, in: child) {
+        return found
+      }
+    }
+
+    return nil
+  }
+
+  // 旋轉軸枚舉
+  enum RotationAxis {
+    case x  // Pitch (上下抬頭)
+    case y  // Yaw (左右旋轉)
+  }
+
+  // 旋轉 base_telescope
+  private func rotateBaseTelescope(by angle: Float, axis: RotationAxis) {
+    guard let telescope = baseTelescope else {
+      print("❌ base_telescope 未找到")
+      return
+    }
+
+    switch axis {
+    case .x:
+      let newRotationX = baseTelescopeRotationX + angle
+      // 限制 pitch 在 -60° 到 +60° 之間，避免翻轉
+      baseTelescopeRotationX = max(-Float.pi / 3, min(Float.pi / 3, newRotationX))
+      print("🔄 base_telescope pitch (上下): \(String(format: "%.0f°", baseTelescopeRotationX * 180 / .pi))")
+
+    case .y:
+      baseTelescopeRotation += angle
+      print("🔄 base_telescope yaw (左右): \(String(format: "%.0f°", baseTelescopeRotation * 180 / .pi))")
+    }
+
+    // 組合 X 和 Y 軸旋轉
+    let rotationQuatX = simd_quatf(angle: baseTelescopeRotationX, axis: [1, 0, 0])
+    let rotationQuatY = simd_quatf(angle: baseTelescopeRotation, axis: [0, 1, 0])
+
+    // 先應用 Y 軸旋轉（yaw），再應用 X 軸旋轉（pitch）
+    telescope.orientation = rotationQuatY * rotationQuatX
+  }
+
+  // 重置 base_telescope 旋轉
+  private func resetBaseTelescopeRotation() {
+    guard let telescope = baseTelescope else {
+      print("❌ base_telescope 未找到")
+      return
+    }
+
+    baseTelescopeRotation = 0.0
+    baseTelescopeRotationX = 0.0
+    telescope.orientation = simd_quatf(angle: 0, axis: [0, 1, 0])
+    print("🔄 base_telescope 已重置旋轉（X 和 Y 軸）")
+  }
+
+  // 綁定 fly_telescope 到 base_telescope
+  private func bindFlyTelescopeToBase() {
+    guard let fly = flyTelescope,
+          let base = baseTelescope else {
+      print("❌ 無法綁定：找不到 fly_telescope 或 base_telescope")
+      return
+    }
+
+    guard !isFlyBoundToBase else {
+      print("⚠️ fly_telescope 已經綁定到 base_telescope")
+      return
+    }
+
+    print("\n🔗 ===== 開始綁定 fly_telescope =====")
+
+    // 保存原始父實體
+    originalFlyTelescopeParent = fly.parent
+    print("📍 原始父實體: \(originalFlyTelescopeParent?.name ?? "<none>")")
+
+    // 保存世界座標、方向和縮放（綁定前）
+    let worldPosition = fly.position(relativeTo: nil)
+    let worldOrientation = fly.orientation(relativeTo: nil)
+    let worldScale = fly.scale(relativeTo: nil)
+    print("🌍 世界座標（綁定前）: \(worldPosition)")
+    print("🧭 世界方向（綁定前）: \(worldOrientation)")
+    print("📏 世界縮放（綁定前）: \(worldScale)")
+
+    // 從原父實體移除
+    fly.removeFromParent()
+    print("✂️ 已從原父實體移除")
+
+    // 添加為 base_telescope 的子實體
+    base.addChild(fly)
+    print("✅ 已添加為 base_telescope 的子實體")
+
+    // 使用 setPosition、setOrientation 和 setScale 恢復世界座標
+    fly.setPosition(worldPosition, relativeTo: nil)
+    fly.setOrientation(worldOrientation, relativeTo: nil)
+    fly.setScale(worldScale, relativeTo: nil)
+    print("📍 已恢復世界座標、方向和縮放")
+
+    // 驗證世界座標是否保持不變
+    let newWorldPosition = fly.position(relativeTo: nil)
+    let newWorldOrientation = fly.orientation(relativeTo: nil)
+    let newWorldScale = fly.scale(relativeTo: nil)
+    print("🌍 世界座標（綁定後）: \(newWorldPosition)")
+    print("🧭 世界方向（綁定後）: \(newWorldOrientation)")
+    print("📏 世界縮放（綁定後）: \(newWorldScale)")
+    print("📏 位置差異: \(distance(worldPosition, newWorldPosition))m")
+    print("📏 縮放差異: \(distance(worldScale, newWorldScale))")
+
+    // 輸出局部座標（相對於 base）
+    print("📍 局部座標（相對於 base）: \(fly.position)")
+    print("🧭 局部方向（相對於 base）: \(fly.orientation)")
+    print("📏 局部縮放（相對於 base）: \(fly.scale)")
+
+    // 更新綁定狀態
+    isFlyBoundToBase = true
+    print("🔗 ===== 綁定完成 =====\n")
+  }
+
+  // 解除 fly_telescope 與 base_telescope 的綁定
+  private func unbindFlyTelescopeFromBase() {
+    guard let fly = flyTelescope,
+          let originalParent = originalFlyTelescopeParent else {
+      print("❌ 無法解除綁定：找不到 fly_telescope 或原始父實體")
+      return
+    }
+
+    guard isFlyBoundToBase else {
+      print("⚠️ fly_telescope 未綁定到 base_telescope")
+      return
+    }
+
+    print("\n🔓 ===== 開始解除綁定 fly_telescope =====")
+
+    // 保存世界座標、方向和縮放（解綁前）
+    let worldPosition = fly.position(relativeTo: nil)
+    let worldOrientation = fly.orientation(relativeTo: nil)
+    let worldScale = fly.scale(relativeTo: nil)
+    print("🌍 世界座標（解綁前）: \(worldPosition)")
+    print("🧭 世界方向（解綁前）: \(worldOrientation)")
+    print("📏 世界縮放（解綁前）: \(worldScale)")
+
+    // 從 base_telescope 移除
+    fly.removeFromParent()
+    print("✂️ 已從 base_telescope 移除")
+
+    // 添加回原父實體
+    originalParent.addChild(fly)
+    print("✅ 已添加回原父實體: \(originalParent.name)")
+
+    // 使用 setPosition、setOrientation 和 setScale 恢復世界座標
+    fly.setPosition(worldPosition, relativeTo: nil)
+    fly.setOrientation(worldOrientation, relativeTo: nil)
+    fly.setScale(worldScale, relativeTo: nil)
+    print("📍 已恢復世界座標、方向和縮放")
+
+    // 驗證世界座標是否保持不變
+    let newWorldPosition = fly.position(relativeTo: nil)
+    let newWorldOrientation = fly.orientation(relativeTo: nil)
+    let newWorldScale = fly.scale(relativeTo: nil)
+    print("🌍 世界座標（解綁後）: \(newWorldPosition)")
+    print("🧭 世界方向（解綁後）: \(newWorldOrientation)")
+    print("📏 世界縮放（解綁後）: \(newWorldScale)")
+    print("📏 位置差異: \(distance(worldPosition, newWorldPosition))m")
+    print("📏 縮放差異: \(distance(worldScale, newWorldScale))")
+
+    // 輸出局部座標（相對於原父實體）
+    print("📍 局部座標（相對於原父實體）: \(fly.position)")
+    print("🧭 局部方向（相對於原父實體）: \(fly.orientation)")
+    print("📏 局部縮放（相對於原父實體）: \(fly.scale)")
+
+    // 更新綁定狀態
+    isFlyBoundToBase = false
+    print("🔓 ===== 解除綁定完成 =====\n")
   }
 
   private func handleEntityPress(_ entity: Entity) {
@@ -479,47 +676,63 @@ struct TestRealityKit: View {
   }
 
   private func calculateOptimalScale(for entity: Entity) -> Float {
-    // 獲取模型的視覺邊界
+    // 獲取模型的視覺邊界（這個尺寸已經考慮了 metersPerUnit）
     let bounds = entity.visualBounds(relativeTo: nil)
     let modelSize = bounds.extents
 
-    // 保存原始尺寸
-    modelOriginalSize = modelSize
+    print("📏 模型載入後的物理尺寸: \(String(format: "(%.3f, %.3f, %.3f)", modelSize.x, modelSize.y, modelSize.z))m")
 
-    print("📏 模型原始尺寸: \(String(format: "(%.3f, %.3f, %.3f)", modelSize.x, modelSize.y, modelSize.z))")
-
-    // 目標顯示尺寸（單位：公尺，在 RealityKit 中）
-    // 這個值決定模型在視窗中的大小，可以根據需求調整
-    // 對於 RealityView，建議在 0.3 ~ 0.8 之間以確保不超出螢幕
-    let targetSize: Float = 0.6 // 建議在 0.3 ~ 0.8 之間
-
-    // 找出模型最大的維度（考慮寬度和高度，深度影響較小）
+    // 找出模型最大的維度
     let maxDimension = max(modelSize.x, max(modelSize.y, modelSize.z))
 
-    // 計算縮放比例
-    let optimalScale = targetSize / maxDimension
+    // 【階段一】計算標準化縮放：將模型的最大維度縮放到 1m
+    // 這樣不管原始模型的單位是什麼，都會被標準化到相同的基準
+    let normalizedScale = 1.0 / maxDimension
 
-    // 計算縮放後的實際尺寸
-    let scaledSize = SIMD3<Float>(
-      modelSize.x * optimalScale,
-      modelSize.y * optimalScale,
-      modelSize.z * optimalScale
+    // 計算標準化後的尺寸（最大維度為 1m）
+    let normalizedSize = SIMD3<Float>(
+      modelSize.x * normalizedScale,
+      modelSize.y * normalizedScale,
+      modelSize.z * normalizedScale
     )
 
-    print("📐 計算出的最佳縮放比例: \(String(format: "%.4f", optimalScale))")
-    print("📦 縮放後的實際尺寸: \(String(format: "(%.3f, %.3f, %.3f)", scaledSize.x, scaledSize.y, scaledSize.z))")
-    print("📊 寬度: \(String(format: "%.3f", scaledSize.x))m, 高度: \(String(format: "%.3f", scaledSize.y))m, 深度: \(String(format: "%.3f", scaledSize.z))m")
+    // 保存標準化後的尺寸（作為「原始尺寸」的參考）
+    modelOriginalSize = normalizedSize
+
+    // 保存標準化縮放比例，供後續用戶調整 scale 時使用
+    self.normalizedScale = normalizedScale
+
+    print("📐 標準化縮放比例（縮放到 1m）: \(String(format: "%.6f", normalizedScale))")
+    print("📦 標準化後的尺寸: \(String(format: "(%.3f, %.3f, %.3f)", normalizedSize.x, normalizedSize.y, normalizedSize.z))m")
+
+    // 【階段二】計算目標顯示尺寸
+    // 這個值決定模型在視窗中的大小，建議在 0.3 ~ 0.8 之間
+    let targetSize: Float = 0.6
+
+    // 最終縮放 = 標準化縮放 × 目標尺寸
+    let finalScale = normalizedScale * targetSize
+
+    // 計算最終顯示的實際尺寸
+    let finalSize = SIMD3<Float>(
+      normalizedSize.x * targetSize,
+      normalizedSize.y * targetSize,
+      normalizedSize.z * targetSize
+    )
+
+    print("🎯 目標顯示尺寸: \(targetSize)m")
+    print("📊 最終縮放比例: \(String(format: "%.6f", finalScale))")
+    print("📺 最終顯示尺寸: \(String(format: "(%.3f, %.3f, %.3f)", finalSize.x, finalSize.y, finalSize.z))m")
 
     // 檢查是否超出建議範圍
-    if scaledSize.x > 1.0 || scaledSize.y > 1.0 {
+    if finalSize.x > 1.0 || finalSize.y > 1.0 {
       print("⚠️ 警告: 模型可能超出螢幕範圍！")
-    } else if scaledSize.x < 0.2 || scaledSize.y < 0.2 {
+    } else if finalSize.x < 0.2 || finalSize.y < 0.2 {
       print("⚠️ 警告: 模型可能太小！")
     } else {
       print("✅ 模型尺寸在合理範圍內")
     }
 
-    return optimalScale
+    return finalScale
   }
 
   private func createWireframeBoundingBox(for entity: Entity) -> Entity? {
@@ -638,7 +851,7 @@ struct TestRealityKit: View {
           viewSize = geometry.size
 
           do {
-            let loadedBiplane = try Entity.load(named: "s60sj")
+            let loadedBiplane = try Entity.load(named: "boomlift_without_animation")
             biplane = loadedBiplane
 
           // 先生成碰撞形狀
@@ -651,10 +864,15 @@ struct TestRealityKit: View {
           rvc.add(group)
 
           // 🎯 自動調整模型大小以符合螢幕
-          let targetScale = calculateOptimalScale(for: loadedBiplane)
-          group.scale = SIMD3<Float>(repeating: targetScale)
-          scale = targetScale
-          currentScale = targetScale
+          let finalScale = calculateOptimalScale(for: loadedBiplane)
+          group.scale = SIMD3<Float>(repeating: finalScale)
+
+          // 計算初始用戶縮放等級（目標顯示尺寸 / 標準化基準）
+          // calculateOptimalScale 使用 targetSize = 0.6，所以初始 scale = 0.6
+          let targetSize: Float = 0.6
+          scale = targetSize
+          currentScale = targetSize
+          print("🎬 初始化完成 - normalizedScale: \(normalizedScale), userScale: \(scale), finalScale: \(finalScale)")
 
           // 計算模型的視覺邊界
           let bounds = loadedBiplane.visualBounds(relativeTo: nil)
@@ -667,7 +885,7 @@ struct TestRealityKit: View {
           )
 
           // 計算縮放後的模型高度，並將 group 放置在下方
-          let modelHeight = bounds.extents.y * targetScale
+          let modelHeight = bounds.extents.y * finalScale
           // 將模型底部對齊到視圖下方（-0.5 的位置）
           group.position = SIMD3<Float>(0, -0.5 + modelHeight / 2, 0)
 
@@ -686,6 +904,36 @@ struct TestRealityKit: View {
 
           // 打印詳細模型資訊
           printDetailedModelInfo()
+
+          // 查找 base_telescope
+          print("\n🔍 ===== 開始搜尋 base_telescope =====")
+          if let telescope = findEntityByName("base_telescope", in: loadedBiplane) {
+            baseTelescope = telescope
+            print("✅ 找到 base_telescope！")
+            print("   名稱: \(telescope.name)")
+            print("   ID: \(telescope.id)")
+            print("   座標: \(telescope.position)")
+            print("   子物件數量: \(telescope.children.count)")
+          } else {
+            print("❌ 未找到 base_telescope")
+          }
+          print("🔍 ===== 搜尋完成 =====\n")
+
+          // 查找 fly_telescope
+          print("🔍 ===== 開始搜尋 fly_telescope =====")
+          if let fly = findEntityByName("fly_telescope", in: loadedBiplane) {
+            flyTelescope = fly
+            print("✅ 找到 fly_telescope！")
+            print("   名稱: \(fly.name)")
+            print("   ID: \(fly.id)")
+            print("   世界座標: \(fly.position(relativeTo: nil))")
+            print("   局部座標: \(fly.position)")
+            print("   父實體: \(fly.parent?.name ?? "<none>")")
+            print("   子物件數量: \(fly.children.count)")
+          } else {
+            print("❌ 未找到 fly_telescope")
+          }
+          print("🔍 ===== 搜尋完成 =====\n")
 
           // 為所有實體添加邊界框（為 group 添加，這樣可以看到整體邊界）
           print("\n🎯 ===== 開始添加邊界框 =====")
@@ -952,6 +1200,152 @@ struct TestRealityKit: View {
           }
           .padding()
           .background(Color.gray.opacity(0.1))
+          .cornerRadius(8)
+          .padding(.horizontal)
+        }
+
+        // base_telescope 控制區域
+        if baseTelescope != nil {
+          VStack(spacing: 12) {
+            Text("Base Telescope 控制")
+              .font(.headline)
+              .foregroundColor(.primary)
+
+            // 顯示兩個軸的旋轉角度
+            VStack(spacing: 4) {
+              HStack(spacing: 16) {
+                Text("左右 (Yaw): \(String(format: "%.0f°", baseTelescopeRotation * 180 / .pi))")
+                  .font(.caption)
+                  .foregroundColor(.secondary)
+
+                Text("上下 (Pitch): \(String(format: "%.0f°", baseTelescopeRotationX * 180 / .pi))")
+                  .font(.caption)
+                  .foregroundColor(.secondary)
+              }
+            }
+
+            // Y 軸控制 - 左右旋轉
+            VStack(spacing: 8) {
+              Text("左右旋轉 (Yaw)")
+                .font(.caption)
+                .foregroundColor(.secondary)
+
+              HStack(spacing: 20) {
+                Button("◀︎ 左轉 15°") {
+                  rotateBaseTelescope(by: -.pi / 12, axis: .y)
+                }
+                .buttonStyle(.bordered)
+                .font(.caption)
+
+                Button("左轉 5°") {
+                  rotateBaseTelescope(by: -.pi / 36, axis: .y)
+                }
+                .buttonStyle(.bordered)
+                .font(.caption2)
+
+                Button("重置") {
+                  resetBaseTelescopeRotation()
+                }
+                .buttonStyle(.bordered)
+                .font(.caption)
+                .foregroundColor(.orange)
+
+                Button("右轉 5°") {
+                  rotateBaseTelescope(by: .pi / 36, axis: .y)
+                }
+                .buttonStyle(.bordered)
+                .font(.caption2)
+
+                Button("右轉 15° ▶︎") {
+                  rotateBaseTelescope(by: .pi / 12, axis: .y)
+                }
+                .buttonStyle(.bordered)
+                .font(.caption)
+              }
+            }
+
+            // X 軸控制 - 上下抬頭
+            VStack(spacing: 8) {
+              Text("上下抬頭 (Pitch)")
+                .font(.caption)
+                .foregroundColor(.secondary)
+
+              HStack(spacing: 20) {
+                Button("▼ 向下 15°") {
+                  rotateBaseTelescope(by: .pi / 12, axis: .x)
+                }
+                .buttonStyle(.bordered)
+                .font(.caption)
+
+                Button("向下 5°") {
+                  rotateBaseTelescope(by: .pi / 36, axis: .x)
+                }
+                .buttonStyle(.bordered)
+                .font(.caption2)
+
+                Spacer()
+                  .frame(width: 60)
+
+                Button("向上 5°") {
+                  rotateBaseTelescope(by: -.pi / 36, axis: .x)
+                }
+                .buttonStyle(.bordered)
+                .font(.caption2)
+
+                Button("▲ 向上 15°") {
+                  rotateBaseTelescope(by: -.pi / 12, axis: .x)
+                }
+                .buttonStyle(.bordered)
+                .font(.caption)
+              }
+            }
+
+            // fly_telescope 綁定控制（只在找到 fly_telescope 時顯示）
+            if flyTelescope != nil {
+              Divider()
+                .padding(.vertical, 4)
+
+              VStack(spacing: 8) {
+                HStack {
+                  Text("Fly Telescope 綁定")
+                    .font(.subheadline.bold())
+                    .foregroundColor(.primary)
+
+                  Spacer()
+
+                  Text(isFlyBoundToBase ? "已綁定" : "未綁定")
+                    .font(.caption)
+                    .foregroundColor(isFlyBoundToBase ? .green : .secondary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(isFlyBoundToBase ? Color.green.opacity(0.2) : Color.gray.opacity(0.2))
+                    .cornerRadius(4)
+                }
+
+                if isFlyBoundToBase {
+                  Button("🔓 解除綁定 fly_telescope") {
+                    unbindFlyTelescopeFromBase()
+                  }
+                  .buttonStyle(.bordered)
+                  .font(.caption)
+                  .foregroundColor(.red)
+                } else {
+                  Button("🔗 綁定 fly_telescope") {
+                    bindFlyTelescopeToBase()
+                  }
+                  .buttonStyle(.bordered)
+                  .font(.caption)
+                  .foregroundColor(.green)
+                }
+
+                Text(isFlyBoundToBase ? "旋轉 base 會帶動 fly 一起旋轉" : "點擊綁定後，fly 將跟隨 base 旋轉")
+                  .font(.caption2)
+                  .foregroundColor(.secondary)
+              }
+            }
+          }
+          .padding()
+          .background(Color.green.opacity(0.15))
           .cornerRadius(8)
           .padding(.horizontal)
         }
