@@ -65,7 +65,11 @@ struct TestRealityKit: View {
   @State private var focusedEntity: Entity?
   @State private var defaultCameraPosition: SIMD3<Float> = SIMD3<Float>(0, 0, 1.0)
   @State private var focusOutlineEntity: Entity?  // 聚焦輪廓
-  
+  @State private var cameraAzimuth: Float = 0.0  // 水平旋轉角度
+  @State private var cameraElevation: Float = 0.0  // 垂直旋轉角度
+  @State private var orbitCenter: SIMD3<Float> = SIMD3<Float>(0, 0, 0)  // 相機環繞中心點
+  @State private var baseCameraDistance: Float = 1.0  // Pinch 手勢開始時的相機距離
+
   // 相機類型
   enum CameraType {
     case perspective  // 透視相機
@@ -93,22 +97,9 @@ struct TestRealityKit: View {
     totalRotationAngle * 180 / .pi
   }
   
-  // 計算當前實際尺寸（考慮用戶手動縮放）
-  private var currentActualSize: SIMD3<Float> {
-    SIMD3<Float>(
-      modelOriginalSize.x * scale,
-      modelOriginalSize.y * scale,
-      modelOriginalSize.z * scale
-    )
-  }
-  
-  // 計算當前邊界框尺寸（考慮用戶手動縮放）
+  // 計算當前邊界框尺寸（模型保持原始大小，不進行縮放）
   private var boundingBoxSize: SIMD3<Float> {
-    SIMD3<Float>(
-      boundingBoxSizeOriginal.x * scale,
-      boundingBoxSizeOriginal.y * scale,
-      boundingBoxSizeOriginal.z * scale
-    )
+    boundingBoxSizeOriginal
   }
   
   // 計算 bounding box 的 8 個角點（世界座標）
@@ -217,21 +208,14 @@ struct TestRealityKit: View {
   var drag: some Gesture {
     DragGesture(minimumDistance: 10)
       .onChanged { value in
-        // 水平拖曳 → Y 軸旋轉（左右旋轉）- 無限制 0~360度
-        rotationY += Float(value.translation.width) * ratio
-        
-        // 垂直拖曳 → X 軸旋轉（上下旋轉）
-        let newRotationX = rotationX + Float(value.translation.height) * ratio
-        // 限制 X 軸旋轉在 -π/4~π/4 弧度（-45~45度），避免看到底部
-        rotationX = max(-Float.pi / 4, min(Float.pi / 4, newRotationX))
-        
-        
-        // 組合多軸旋轉
-        let rotationQuatX = simd_quatf(angle: rotationX, axis: [1, 0, 0])
-        let rotationQuatY = simd_quatf(angle: rotationY, axis: [0, 1, 0])
-        
-        // 先繞 Y 軸旋轉，再繞 X 軸旋轉
-        group.orientation = rotationQuatY
+        // 水平拖曳 → 更新方位角（環繞 Y 軸）
+        cameraAzimuth += Float(value.translation.width) * ratio
+
+        // 垂直拖曳 → 更新仰角（上下環繞）
+        cameraElevation -= Float(value.translation.height) * ratio
+
+        // 更新相機位置（環繞模型）
+        updateCameraOrbit()
       }.onEnded { _ in
         handleEntityRelease()
       }
@@ -726,7 +710,7 @@ struct TestRealityKit: View {
     modelOriginalSize = normalizedSize
     
     // 保存標準化縮放比例，供後續用戶調整 scale 時使用
-    self.normalizedScale = normalizedScale
+//    self.normalizedScale = normalizedScale
     
     print("📐 標準化縮放比例（縮放到 1m）: \(String(format: "%.6f", normalizedScale))")
     print("📦 標準化後的尺寸: \(String(format: "(%.3f, %.3f, %.3f)", normalizedSize.x, normalizedSize.y, normalizedSize.z))m")
@@ -856,10 +840,10 @@ struct TestRealityKit: View {
     if let boundingBox = createWireframeBoundingBox(for: entity) {
       entity.addChild(boundingBox)
       
-      // 計算並保存邊界框尺寸（使用世界座標空間以包含縮放變換）
+      // 計算並保存邊界框尺寸（使用世界座標空間）
       let bounds = entity.visualBounds(relativeTo: nil)
-      // 儲存未縮放的原始尺寸（除以當前縮放比例）
-      boundingBoxSizeOriginal = bounds.extents / scale
+      // 儲存原始尺寸（模型保持原始大小，不進行縮放）
+      boundingBoxSizeOriginal = bounds.extents
       
       print("📦 已為最外層實體 '\(entity.name.isEmpty ? "<unnamed>" : entity.name)' 添加邊界框")
       print("📏 邊界框原始尺寸: \(String(format: "(%.3f, %.3f, %.3f)", boundingBoxSizeOriginal.x, boundingBoxSizeOriginal.y, boundingBoxSizeOriginal.z))")
@@ -967,7 +951,27 @@ struct TestRealityKit: View {
   }
   
   // MARK: - Camera Control Functions
-  
+
+  /// 更新相機環繞位置（基於球面座標）
+  private func updateCameraOrbit() {
+    guard let camera = cameraEntity else {
+      return
+    }
+
+    // 將球面座標轉換為笛卡爾座標
+    let x = orbitCenter.x + cameraDistance * cos(cameraElevation) * sin(cameraAzimuth)
+    let y = orbitCenter.y + cameraDistance * sin(cameraElevation)
+    let z = orbitCenter.z + cameraDistance * cos(cameraElevation) * cos(cameraAzimuth)
+
+    let newPosition = SIMD3<Float>(x, y, z)
+
+    // 立即更新相機位置（無動畫）
+    camera.position = newPosition
+
+    // 讓相機看向環繞中心點
+    camera.look(at: orbitCenter, from: newPosition, relativeTo: nil)
+  }
+
   /// 切換相機類型
   /// - Parameter type: 目標相機類型
   private func switchCamera(to type: CameraType) {
@@ -1351,9 +1355,16 @@ struct TestRealityKit: View {
             // 保存預設位置
             defaultCameraPosition = cameraPosition
             cameraDistance = optimalDistance
-            
+            baseCameraDistance = optimalDistance  // 初始化 pinch 手勢基準距離
+
+            // 初始化相機環繞狀態
+            orbitCenter = bounds.center  // 使用模型中心作為環繞中心
+            cameraAzimuth = 0.0  // 初始方位角（面向 -Z 軸）
+            cameraElevation = 0.0  // 初始仰角（水平面）
+
             print("📸 相機位置: \(cameraPosition)")
             print("📸 最佳距離: \(optimalDistance)m")
+            print("🔄 環繞中心: \(orbitCenter)")
             print("✅ 相機已創建並設為活動相機")
             print("🎥 ===== 相機設置完成 =====\n")
           } catch {
