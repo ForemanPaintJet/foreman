@@ -1185,23 +1185,37 @@ struct TestRealityKit: View {
     )
     
     cameraEntity.look(at: [0, 0, 0], from: defaultCameraPosition, relativeTo: nil)
-    
-    // 🗑️ 移除聚焦輪廓並重置聚焦實體的顏色
-    if let entity = focusedEntity {
-      resetEntityColor(entity)
-      print("🔄 重置聚焦實體的顏色")
-    }
-    removeFocusOutline()
-    
-    // 清除聚焦實體
-    focusedEntity = nil
-    
+
+    // 🗑️ 釋放聚焦
+    releaseFocus()
+
     print("✅ 相機重置完成")
   }
   
   /// 獲取當前活動相機實體
   private func getActiveCameraEntity() -> Entity? {
     return cameraEntity
+  }
+
+  /// 釋放當前聚焦的實體
+  private func releaseFocus() {
+    guard let entity = focusedEntity else {
+      print("⚠️ 沒有聚焦的實體")
+      return
+    }
+
+    print("🔓 釋放聚焦: \(entity.name.isEmpty ? "<unnamed>" : entity.name)")
+
+    // 重置實體顏色
+    resetEntityColor(entity)
+
+    // 移除聚焦輪廓
+    removeFocusOutline()
+
+    // 清除聚焦實體
+    focusedEntity = nil
+
+    print("✅ 聚焦已釋放")
   }
   
   var body: some View {
@@ -1351,173 +1365,6 @@ struct TestRealityKit: View {
             .simultaneously(with: drag)
             .simultaneously(with: pinch)
         ).border(.red)
-        
-        // 頂部狀態列
-        VStack(spacing: 4) {
-          // View 尺寸資訊
-          HStack(spacing: 12) {
-            Text("螢幕尺寸:")
-              .font(.caption.bold())
-              .foregroundColor(.primary)
-            Text("W: \(String(format: "%.0f", viewSize.width))px")
-              .font(.caption)
-              .foregroundColor(.secondary)
-            Text("H: \(String(format: "%.0f", viewSize.height))px")
-              .font(.caption)
-              .foregroundColor(.secondary)
-          }
-          .padding(.horizontal, 12)
-          .padding(.vertical, 6)
-          .background(Color.purple.opacity(0.2))
-          .cornerRadius(8)
-          .padding(.top, 8)
-          .padding(.horizontal)
-          
-          HStack(spacing: 12) {
-            // 縮放比例
-            Text("縮放: \(String(format: "%.2f×", scale))")
-              .font(.caption)
-              .foregroundColor(.primary)
-            
-            Divider()
-              .frame(height: 12)
-            
-            // X 軸旋轉
-            VStack(alignment: .leading, spacing: 2) {
-              Text("X: \(String(format: "%.0f°", rotationXDegrees))")
-                .font(.caption)
-              Text("\(String(format: "%.2f", rotationX)) rad")
-                .font(.caption2)
-                .foregroundColor(.secondary)
-            }
-            
-            Divider()
-              .frame(height: 12)
-            
-            // Y 軸旋轉
-            VStack(alignment: .leading, spacing: 2) {
-              Text("Y: \(String(format: "%.0f°", rotationYDegrees))")
-                .font(.caption)
-              Text("\(String(format: "%.2f", rotationY)) rad")
-                .font(.caption2)
-                .foregroundColor(.secondary)
-            }
-            
-            Divider()
-              .frame(height: 12)
-            
-            // 總旋轉角度
-            VStack(alignment: .leading, spacing: 2) {
-              Text("總: \(String(format: "%.0f°", totalRotationDegrees))")
-                .font(.caption)
-              Text("\(String(format: "%.2f", totalRotationAngle)) rad")
-                .font(.caption2)
-                .foregroundColor(.secondary)
-            }
-          }
-          .padding(.horizontal, 12)
-          .padding(.vertical, 8)
-          .background(Color.black.opacity(0.3))
-          .cornerRadius(8)
-          .padding(.top, 8)
-          .padding(.horizontal)
-          
-          // 物件尺寸資訊
-          if modelOriginalSize != SIMD3<Float>(0, 0, 0) {
-            VStack(alignment: .leading, spacing: 6) {
-              Text("物件尺寸")
-                .font(.caption.bold())
-                .foregroundColor(.primary)
-              
-              HStack(spacing: 12) {
-                // 原始尺寸
-                VStack(alignment: .leading, spacing: 2) {
-                  Text("原始")
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-                  HStack(spacing: 4) {
-                    Text("W: \(String(format: "%.2f", modelOriginalSize.x))m")
-                      .font(.caption2)
-                    Text("H: \(String(format: "%.2f", modelOriginalSize.y))m")
-                      .font(.caption2)
-                    Text("D: \(String(format: "%.2f", modelOriginalSize.z))m")
-                      .font(.caption2)
-                  }
-                }
-                
-                Divider()
-                  .frame(height: 24)
-                
-                // 當前尺寸
-                VStack(alignment: .leading, spacing: 2) {
-                  Text("當前 (\(String(format: "%.2f×", scale)))")
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-                  HStack(spacing: 4) {
-                    Text("W: \(String(format: "%.3f", currentActualSize.x))m")
-                      .font(.caption2)
-                      .foregroundColor(currentActualSize.x > 1.0 ? .red : .primary)
-                    Text("H: \(String(format: "%.3f", currentActualSize.y))m")
-                      .font(.caption2)
-                      .foregroundColor(currentActualSize.y > 1.0 ? .red : .primary)
-                    Text("D: \(String(format: "%.3f", currentActualSize.z))m")
-                      .font(.caption2)
-                  }
-                }
-              }
-              
-              // 邊界框尺寸
-              if boundingBoxSize != SIMD3<Float>(0, 0, 0) {
-                Divider()
-                  .frame(height: 1)
-                  .padding(.vertical, 4)
-                
-                VStack(alignment: .leading, spacing: 2) {
-                  Text("邊界框")
-                    .font(.caption2)
-                    .foregroundColor(.blue)
-                  HStack(spacing: 4) {
-                    Text("W: \(String(format: "%.3f", boundingBoxSize.x))m")
-                      .font(.caption2)
-                      .foregroundColor(.blue)
-                    Text("H: \(String(format: "%.3f", boundingBoxSize.y))m")
-                      .font(.caption2)
-                      .foregroundColor(.blue)
-                    Text("D: \(String(format: "%.3f", boundingBoxSize.z))m")
-                      .font(.caption2)
-                      .foregroundColor(.blue)
-                  }
-                }
-              }
-              
-              // 警告提示
-              if isOutOfScreen {
-                Text("⚠️ 物件超出螢幕範圍（投影檢測）")
-                  .font(.caption2)
-                  .foregroundColor(.red)
-              } else if currentActualSize.x > 1.0 || currentActualSize.y > 1.0 {
-                Text("⚠️ 物件可能超出螢幕範圍")
-                  .font(.caption2)
-                  .foregroundColor(.red)
-              } else if currentActualSize.x < 0.2 || currentActualSize.y < 0.2 {
-                Text("⚠️ 物件可能太小")
-                  .font(.caption2)
-                  .foregroundColor(.orange)
-              } else {
-                Text("✅ 物件在螢幕範圍內")
-                  .font(.caption2)
-                  .foregroundColor(.green)
-              }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(Color.blue.opacity(0.15))
-            .cornerRadius(8)
-            .padding(.horizontal)
-          }
-          
-          Spacer()
-        }
         
         // UI 控制層 - 浮動在底部
         VStack {
@@ -2138,6 +1985,31 @@ struct TestRealityKit: View {
           .background(Color.purple.opacity(0.1))
           .cornerRadius(8)
           .padding(.horizontal)
+        }
+
+        // 🔄 重置相機按鈕 - 浮動在右上角
+        if focusedEntity != nil {
+          VStack {
+            HStack {
+              Spacer()
+
+              Button(action: {
+                resetCameraView()
+              }) {
+                Image(systemName: "arrow.counterclockwise.circle.fill")
+                  .font(.title2)
+                  .foregroundColor(.white)
+                  .padding(12)
+                  .background(Color.orange.opacity(0.8))
+                  .clipShape(Circle())
+                  .shadow(color: .black.opacity(0.3), radius: 4, x: 0, y: 2)
+              }
+              .buttonStyle(.plain)
+              .padding(.trailing, 20)
+              .padding(.top, 20)
+            }
+            Spacer()
+          }
         }
       }
     }
