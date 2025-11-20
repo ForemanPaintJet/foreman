@@ -1039,68 +1039,73 @@ struct TestRealityKit: View {
       print("❌ 相機未初始化")
       return
     }
-    
+
     print("🎯 聚焦到實體: \(entity.name.isEmpty ? "<unnamed>" : entity.name)")
-    
+
     // 🗑️ 移除之前的聚焦輪廓並重置顏色（如果存在）
     if let previousEntity = focusedEntity, previousEntity != entity {
       resetEntityColor(previousEntity)
       print("🔄 重置之前聚焦實體的顏色")
     }
     removeFocusOutline()
-    
+
     // 獲取實體邊界
     let bounds = entity.visualBounds(relativeTo: nil)
     let entityCenter = bounds.center
     let maxDimension = max(bounds.extents.x, max(bounds.extents.y, bounds.extents.z))
-    
+
     print("📏 實體中心: \(entityCenter)")
     print("📏 最大維度: \(maxDimension)m")
-    
+
     // 計算最佳距離
     let optimalDistance = calculateOptimalDistance(objectSize: maxDimension, fovDegrees: cameraFOV)
-    
-    // 計算相機位置（從正前方觀看）
-    let cameraPosition = SIMD3<Float>(
-      entityCenter.x,
-      entityCenter.y,
-      entityCenter.z + optimalDistance
-    )
-    
-    print("📸 相機位置: \(cameraPosition)")
-    print("📸 距離: \(optimalDistance)m")
-    
-    // 動畫相機移動
+
+    // 🔄 更新環繞中心為實體中心
+    orbitCenter = entityCenter
+
+    // 📸 保持當前的相機方位角和仰角，只調整距離
+    cameraDistance = optimalDistance
+
+    // 🎬 使用環繞系統計算新的相機位置（基於當前的 azimuth 和 elevation）
+    let x = orbitCenter.x + cameraDistance * cos(cameraElevation) * sin(cameraAzimuth)
+    let y = orbitCenter.y + cameraDistance * sin(cameraElevation)
+    let z = orbitCenter.z + cameraDistance * cos(cameraElevation) * cos(cameraAzimuth)
+
+    let newPosition = SIMD3<Float>(x, y, z)
+
+    print("📸 當前方位角: \(String(format: "%.0f°", cameraAzimuth * 180 / .pi))")
+    print("📸 當前仰角: \(String(format: "%.0f°", cameraElevation * 180 / .pi))")
+    print("📸 新相機位置: \(newPosition)")
+    print("📸 最佳距離: \(optimalDistance)m")
+
+    // 動畫相機移動到新位置
     let targetTransform = Transform(
       scale: cameraEntity.scale,
       rotation: cameraEntity.orientation,
-      translation: cameraPosition
+      translation: newPosition
     )
-    
+
     cameraEntity.move(
       to: targetTransform,
       relativeTo: nil,
       duration: duration,
       timingFunction: .easeInOut
     )
-    
-    // 更新 look-at 方向
-    //    cameraEntity.look(at: entityCenter, from: cameraPosition, relativeTo: nil)
-    
+
+    // 讓相機看向實體中心
+    cameraEntity.look(at: entityCenter, from: newPosition, relativeTo: nil)
+
     // 🌟 為聚焦實體添加金色輪廓
     if let outline = createFocusOutline(for: entity) {
       entity.addChild(outline)
       focusOutlineEntity = outline
       print("✨ 已添加金色聚焦輪廓")
     }
-    
-    // 更新距離狀態
-    cameraDistance = optimalDistance
-    
+
     // 🎯 設置為聚焦實體（在重置舊實體顏色之後）
     focusedEntity = entity
     print("🎯 已設置聚焦實體")
-    
+
     print("✅ 聚焦完成")
   }
   
