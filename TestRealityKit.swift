@@ -66,7 +66,6 @@ struct TestRealityKit: View {
   @State private var cameraElevation: Float = 0.0  // 垂直旋轉角度
   @State private var orbitCenter: SIMD3<Float> = SIMD3<Float>(0, 0, 0)  // 相機環繞中心點
   @State private var baseCameraDistance: Float = 1.0  // Pinch 手勢開始時的相機距離
-  @State private var enableElevationLimit: Bool = false  // 是否啟用仰角限制
 
   // 相機類型
   enum CameraType {
@@ -212,14 +211,9 @@ struct TestRealityKit: View {
         // 垂直拖曳 → 更新仰角（上下環繞）
         let newElevation = cameraElevation - Float(value.translation.height) * ratio
 
-        if enableElevationLimit {
-          // 限制仰角在 0° 到 +85° 之間（只能往上看，避免翻轉）
-          let maxElevation: Float = .pi * 85 / 180  // 85° ≈ 1.484 弧度
-          cameraElevation = max(0, min(maxElevation, newElevation))
-        } else {
-          // 不限制仰角
-          cameraElevation = newElevation
-        }
+        // 限制仰角在 0° 到 +85° 之間（只能往上看，避免翻轉）
+        let maxElevation: Float = .pi * 85 / 180  // 85° ≈ 1.484 弧度
+        cameraElevation = max(0, min(maxElevation, newElevation))
 
         // 更新相機位置（環繞模型）
         updateCameraOrbit()
@@ -1399,22 +1393,6 @@ struct TestRealityKit: View {
             .buttonStyle(.plain)
             
             if showCameraControls {
-              // 仰角限制開關
-              Toggle(isOn: $enableElevationLimit) {
-                VStack(alignment: .leading, spacing: 2) {
-                  Text("限制仰角（防翻轉）")
-                    .font(.caption)
-                    .foregroundColor(.primary)
-                  Text(enableElevationLimit ? "僅允許 0° ~ +85°（往上看）" : "無限制（可能翻轉）")
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-                }
-              }
-              .tint(.orange)
-
-              Divider()
-                .padding(.vertical, 4)
-
               // FOV 控制（透視相機）
               VStack(spacing: 8) {
                 HStack {
