@@ -1323,7 +1323,7 @@ struct TestRealityKit: View {
             let bounds = group.visualBounds(relativeTo: nil)
             let maxDimension = max(bounds.extents.x, max(bounds.extents.y, bounds.extents.z))
             let optimalDistance = calculateOptimalDistance(objectSize: maxDimension, fovDegrees: cameraFOV)
-            let cameraPosition = SIMD3<Float>(0, 0, optimalDistance)
+            let cameraPosition = SIMD3<Float>(-0.59, 0.21, -1.19)
             
             // 創建相機實體
             let camera = Entity()
@@ -1987,6 +1987,58 @@ struct TestRealityKit: View {
           .background(Color.purple.opacity(0.1))
           .cornerRadius(8)
           .padding(.horizontal)
+        }
+
+        // 📊 相機資訊 - 浮動在左上角
+        VStack {
+          HStack {
+            VStack(alignment: .leading, spacing: 4) {
+              Text("Camera Info")
+                .font(.caption)
+                .fontWeight(.bold)
+                .foregroundColor(.white)
+
+              if let camera = cameraEntity {
+                Text("Position: \(String(format: "(%.2f, %.2f, %.2f)", camera.position.x, camera.position.y, camera.position.z))")
+                  .font(.caption2)
+                  .foregroundColor(.white.opacity(0.9))
+              }
+
+              Text("Azimuth: \(String(format: "%.0f°", cameraAzimuth * 180 / .pi))")
+                .font(.caption2)
+                .foregroundColor(.white.opacity(0.9))
+
+              Text("Elevation: \(String(format: "%.0f°", cameraElevation * 180 / .pi))")
+                .font(.caption2)
+                .foregroundColor(.white.opacity(0.9))
+
+              Text("FOV: \(String(format: "%.0f°", cameraFOV))")
+                .font(.caption2)
+                .foregroundColor(.white.opacity(0.9))
+
+              Text("Distance: \(String(format: "%.2fm", cameraDistance))")
+                .font(.caption2)
+                .foregroundColor(.white.opacity(0.9))
+
+              Text("Orbit Center: \(String(format: "(%.2f, %.2f, %.2f)", orbitCenter.x, orbitCenter.y, orbitCenter.z))")
+                .font(.caption2)
+                .foregroundColor(.white.opacity(0.9))
+
+              Text("Focus: \(focusedEntity?.name ?? "None")")
+                .font(.caption2)
+                .foregroundColor(.white.opacity(0.9))
+            }
+            .padding(12)
+            .background(Color.black.opacity(0.6))
+            .cornerRadius(8)
+            .shadow(color: .black.opacity(0.3), radius: 4, x: 0, y: 2)
+
+            Spacer()
+          }
+          .padding(.leading, 20)
+          .padding(.top, 20)
+
+          Spacer()
         }
 
         // 🔄 重置相機按鈕 - 浮動在右上角
