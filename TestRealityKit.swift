@@ -11,9 +11,6 @@ import SwiftUI
 struct TestRealityKit: View {
   @State private var rotationX: Float = 0.0
   @State private var rotationY: Float = 0.0
-  @State private var scale: Float = 1.0
-  @State private var currentScale: Float = 1.0
-  @State private var normalizedScale: Float = 1.0  // 標準化縮放（將模型縮放到 1m 基準）
   let group = AnchorEntity()
   @State private var biplane: Entity?
   
@@ -249,19 +246,14 @@ struct TestRealityKit: View {
     MagnificationGesture()
       .onChanged { mag in
         print("Pinch detected: \(mag)")
-        let newScale = currentScale * Float(mag)
-        // 限制用戶縮放在 0.1 ~ 5.0 之間
-        scale = min(max(newScale, 0.1), 5.0)
-        print("User scale: \(scale)")
-        
-        // 實際應用的縮放 = 標準化縮放 × 用戶縮放
-        let finalScale = normalizedScale * scale
-        print("Final scale applied: \(finalScale)")
-        group.scale = SIMD3(repeating: finalScale)
+        let newDistance = baseCameraDistance / Float(mag)
+        cameraDistance = min(max(newDistance, 0.5), 3.0)
+        print("Camera distance: \(cameraDistance)m")
+        updateCameraOrbit()
       }
       .onEnded { _ in
-        print("Pinch ended, user scale: \(scale)")
-        currentScale = scale
+        print("Pinch ended, camera distance: \(cameraDistance)m")
+        baseCameraDistance = cameraDistance
       }
   }
   
@@ -590,10 +582,10 @@ struct TestRealityKit: View {
     return path.joined(separator: " → ")
   }
   
-  private func createAxisLines() {
+  private func createAxisLines() -> Entity {
     let axisLength: Float = 0.2
     let axisThickness: Float = 0.005
-    
+
     // X 軸（紅色）
     let xAxisMesh = MeshResource.generateBox(size: SIMD3<Float>(axisLength, axisThickness, axisThickness))
     var xAxisMaterial = SimpleMaterial()
@@ -603,7 +595,7 @@ struct TestRealityKit: View {
     let xAxis = ModelEntity(mesh: xAxisMesh, materials: [xAxisMaterial])
     xAxis.name = "X軸"
     xAxis.position = SIMD3<Float>(axisLength / 2, 0, 0)
-    
+
     // Y 軸（綠色）
     let yAxisMesh = MeshResource.generateBox(size: SIMD3<Float>(axisThickness, axisLength, axisThickness))
     var yAxisMaterial = SimpleMaterial()
@@ -613,7 +605,7 @@ struct TestRealityKit: View {
     let yAxis = ModelEntity(mesh: yAxisMesh, materials: [yAxisMaterial])
     yAxis.name = "Y軸"
     yAxis.position = SIMD3<Float>(0, axisLength / 2, 0)
-    
+
     // Z 軸（藍色）
     let zAxisMesh = MeshResource.generateBox(size: SIMD3<Float>(axisThickness, axisThickness, axisLength))
     var zAxisMaterial = SimpleMaterial()
@@ -623,23 +615,24 @@ struct TestRealityKit: View {
     let zAxis = ModelEntity(mesh: zAxisMesh, materials: [zAxisMaterial])
     zAxis.name = "Z軸"
     zAxis.position = SIMD3<Float>(0, 0, axisLength / 2)
-    
-    // 創建一個容器來放置軸線，放在左下角偏移位置
+
+    // 創建一個容器來放置軸線，放在左上角
     let axisContainer = Entity()
+    axisContainer.name = "AxisLines"
     axisContainer.addChild(xAxis)
     axisContainer.addChild(yAxis)
     axisContainer.addChild(zAxis)
-    
-    // 放在左下角，不干擾主模型
-    axisContainer.position = SIMD3<Float>(-0.4, -0.3, 0)
-    
-    group.addChild(axisContainer)
-    
-    print("✅ 已創建 3D 軸線（左下角）：")
+
+    // 放在左上角，不干擾主模型（不受 group.scale 影響）
+    axisContainer.position = SIMD3<Float>(0, 0, 0)
+
+    print("✅ 已創建 3D 軸線（左上角）：")
     print("   🔴 X 軸（紅色）- 向右")
     print("   🟢 Y 軸（綠色）- 向上")
     print("   🔵 Z 軸（藍色）- 向前")
-    print("   📍 位置: (-0.4, -0.3, 0)")
+    print("   ⭐ 固定尺寸，不受模型縮放影響")
+
+    return axisContainer
   }
   
   private func configureInputTarget(_ entity: Entity) {
@@ -695,64 +688,26 @@ struct TestRealityKit: View {
     print("🔄 重置組件顏色 '\(entity.name.isEmpty ? "<unnamed>" : entity.name)'")
   }
   
-  private func calculateOptimalScale(for entity: Entity) -> Float {
+  private func setupModelBounds(for entity: Entity) -> Float {
     // 獲取模型的視覺邊界（這個尺寸已經考慮了 metersPerUnit）
     let bounds = entity.visualBounds(relativeTo: nil)
     let modelSize = bounds.extents
-    
+
     print("📏 模型載入後的物理尺寸: \(String(format: "(%.3f, %.3f, %.3f)", modelSize.x, modelSize.y, modelSize.z))m")
-    
+
     // 找出模型最大的維度
     let maxDimension = max(modelSize.x, max(modelSize.y, modelSize.z))
-    
-    // 【階段一】計算標準化縮放：將模型的最大維度縮放到 1m
-    // 這樣不管原始模型的單位是什麼，都會被標準化到相同的基準
+    print("📏 模型最大維度: \(String(format: "%.3f", maxDimension))m")
+
+    // 計算標準化縮放比例（將最大維度縮放到 1m）
     let normalizedScale = 1.0 / maxDimension
-    
-    // 計算標準化後的尺寸（最大維度為 1m）
-    let normalizedSize = SIMD3<Float>(
-      modelSize.x * normalizedScale,
-      modelSize.y * normalizedScale,
-      modelSize.z * normalizedScale
-    )
-    
-    // 保存標準化後的尺寸（作為「原始尺寸」的參考）
-    modelOriginalSize = normalizedSize
-    
-    // 保存標準化縮放比例，供後續用戶調整 scale 時使用
-//    self.normalizedScale = normalizedScale
-    
-    print("📐 標準化縮放比例（縮放到 1m）: \(String(format: "%.6f", normalizedScale))")
-    print("📦 標準化後的尺寸: \(String(format: "(%.3f, %.3f, %.3f)", normalizedSize.x, normalizedSize.y, normalizedSize.z))m")
-    
-    // 【階段二】計算目標顯示尺寸
-    // 這個值決定模型在視窗中的大小，建議在 0.3 ~ 0.8 之間
-    let targetSize: Float = 0.6
-    
-    // 最終縮放 = 標準化縮放 × 目標尺寸
-    let finalScale = normalizedScale * targetSize
-    
-    // 計算最終顯示的實際尺寸
-    let finalSize = SIMD3<Float>(
-      normalizedSize.x * targetSize,
-      normalizedSize.y * targetSize,
-      normalizedSize.z * targetSize
-    )
-    
-    print("🎯 目標顯示尺寸: \(targetSize)m")
-    print("📊 最終縮放比例: \(String(format: "%.6f", finalScale))")
-    print("📺 最終顯示尺寸: \(String(format: "(%.3f, %.3f, %.3f)", finalSize.x, finalSize.y, finalSize.z))m")
-    
-    // 檢查是否超出建議範圍
-    if finalSize.x > 1.0 || finalSize.y > 1.0 {
-      print("⚠️ 警告: 模型可能超出螢幕範圍！")
-    } else if finalSize.x < 0.2 || finalSize.y < 0.2 {
-      print("⚠️ 警告: 模型可能太小！")
-    } else {
-      print("✅ 模型尺寸在合理範圍內")
-    }
-    
-    return finalScale
+    print("📐 標準化縮放比例: \(String(format: "%.6f", normalizedScale))")
+
+    // 保存標準化後的模型尺寸
+    modelOriginalSize = modelSize * normalizedScale
+    print("📦 標準化後尺寸: \(String(format: "(%.3f, %.3f, %.3f)", modelOriginalSize.x, modelOriginalSize.y, modelOriginalSize.z))m")
+
+    return normalizedScale
   }
   
   private func createWireframeBoundingBox(for entity: Entity) -> Entity? {
@@ -1179,34 +1134,64 @@ struct TestRealityKit: View {
   /// 重置相機視角
   private func resetCameraView() {
     guard let cameraEntity = getActiveCameraEntity() else { return }
-    
+
     print("🔄 重置相機視角")
-    
+
     // 重置 FOV（透視相機）
     cameraFOV = 60.0
     animateCameraFOV(to: 60.0, duration: 0.5)
-    
-    // 重置距離
-    cameraDistance = 1.0
-    
-    // 重置位置
-    let targetTransform = Transform(
-      scale: cameraEntity.scale,
-      rotation: simd_quatf(angle: 0, axis: [0, 1, 0]),
-      translation: defaultCameraPosition
-    )
-    
-    cameraEntity.move(
-      to: targetTransform,
-      relativeTo: nil,
-      duration: 0.5,
-      timingFunction: .easeInOut
-    )
-    
-    cameraEntity.look(at: [0, 0, 0], from: defaultCameraPosition, relativeTo: nil)
 
-    // 🗑️ 釋放聚焦
-    releaseFocus()
+    if let _ = focusedEntity {
+      // 🎯 有 focus 實體：只調整距離，保持方位角和仰角
+      print("🎯 偵測到 focus 實體，保持當前視角")
+
+      // 計算能看到整個場景的距離
+      let bounds = group.visualBounds(relativeTo: nil)
+      let maxDimension = max(bounds.extents.x, max(bounds.extents.y, bounds.extents.z))
+      let optimalDistance = calculateOptimalDistance(objectSize: maxDimension, fovDegrees: cameraFOV)
+
+      // 更新環繞中心為整個場景的中心
+      orbitCenter = bounds.center
+
+      // 更新距離（保持方位角和仰角）
+      cameraDistance = optimalDistance
+      baseCameraDistance = optimalDistance
+
+      // 使用環繞系統更新相機位置（保持 azimuth 和 elevation）
+      updateCameraOrbit()
+
+      print("📸 已重置距離到: \(optimalDistance)m")
+      print("🔄 保持方位角: \(String(format: "%.0f°", cameraAzimuth * 180 / .pi))")
+      print("🔄 保持仰角: \(String(format: "%.0f°", cameraElevation * 180 / .pi))")
+      print("🎯 保持 focus 狀態")
+
+    } else {
+      // 🔄 沒有 focus 實體：完整重置
+      print("🔄 執行完整重置")
+
+      cameraDistance = 1.0
+
+      let targetTransform = Transform(
+        scale: cameraEntity.scale,
+        rotation: simd_quatf(angle: 0, axis: [0, 1, 0]),
+        translation: defaultCameraPosition
+      )
+
+      cameraEntity.move(
+        to: targetTransform,
+        relativeTo: nil,
+        duration: 0.5,
+        timingFunction: .easeInOut
+      )
+
+      cameraEntity.look(at: [0, 0, 0], from: defaultCameraPosition, relativeTo: nil)
+
+      // 重置環繞狀態
+      cameraAzimuth = 0.0
+      cameraElevation = 0.0
+      orbitCenter = SIMD3<Float>(0, 0, 0)
+      baseCameraDistance = 1.0
+    }
 
     print("✅ 相機重置完成")
   }
@@ -1262,32 +1247,28 @@ struct TestRealityKit: View {
             
             group.addChild(loadedBiplane)
             rvc.add(group)
-            
-            // 🎯 自動調整模型大小以符合螢幕
-            let finalScale = calculateOptimalScale(for: loadedBiplane)
-            group.scale = SIMD3<Float>(repeating: finalScale)
-            
-            // 計算初始用戶縮放等級（目標顯示尺寸 / 標準化基準）
-            // calculateOptimalScale 使用 targetSize = 0.6，所以初始 scale = 0.6
-            let targetSize: Float = 0.6
-            scale = targetSize
-            currentScale = targetSize
-            print("🎬 初始化完成 - normalizedScale: \(normalizedScale), userScale: \(scale), finalScale: \(finalScale)")
-            
-            // 計算模型的視覺邊界
+
+            // 🎯 計算並應用初始縮放（將模型標準化到最大維度 1m）
+            let normalizedScale = setupModelBounds(for: loadedBiplane)
+            group.scale = SIMD3<Float>(repeating: normalizedScale)
+            print("📦 已應用標準化縮放: \(normalizedScale)")
+
+            // 計算模型的視覺邊界（縮放前的原始邊界）
             let biplaneBounds = loadedBiplane.visualBounds(relativeTo: nil)
-            
+
             // 將模型的視覺中心對齊到 group 的原點（補償模型原點與視覺中心的偏移）
             loadedBiplane.position = SIMD3<Float>(
               -biplaneBounds.center.x,
                -biplaneBounds.center.y,
                -biplaneBounds.center.z
             )
-            
-            // 計算縮放後的模型高度，並將 group 放置在下方
-            let modelHeight = biplaneBounds.extents.y * finalScale
-            // 將模型底部對齊到視圖下方（-0.5 的位置）
-            group.position = SIMD3<Float>(0,  -modelHeight, 0)
+
+            // 使用標準化後的模型高度來設置 group 位置
+            let normalizedHeight = biplaneBounds.extents.y * normalizedScale
+            // 將模型底部對齊到視圖下方
+            group.position = SIMD3<Float>(0,  -normalizedHeight / 2, 0)
+            print("📍 Group 位置: \(group.position)")
+            print("📏 標準化後高度: \(normalizedHeight)m")
             
             //          // 保存原始狀態
             //          originalGroupPosition = group.position
@@ -1298,10 +1279,11 @@ struct TestRealityKit: View {
             
             // 設定動畫
             setupAnimations()
-            
-            // 創建 3D 軸線（左下角參考用）
-            createAxisLines()
-            
+
+            // 創建 3D 軸線（左上角參考用，固定尺寸不受模型縮放影響）
+            let axisLines = createAxisLines()
+            rvc.add(axisLines)
+
             // 打印詳細模型資訊
             printDetailedModelInfo()
             
