@@ -54,6 +54,12 @@ struct TestRealityKit: View {
   @State private var showAnimationControls: Bool = false
   @State private var showEntityInfo: Bool = false
   
+  // 標記系統
+  @State private var showEntityMarkers: Bool = false
+  @State private var entityMarkers: [Entity] = []
+  @State private var discoveredEntities: [Entity] = []
+  @State private var showMarkerControls: Bool = false
+  
   // 相機控制
   @State private var cameraEntity: Entity?
   @State private var cameraType: CameraType = .perspective
@@ -334,12 +340,328 @@ struct TestRealityKit: View {
   }
   
   private func findAllModelEntities(in entity: Entity, results: inout [Entity]) {
+    print("🔍 檢查實體: \(entity.name.isEmpty ? "<unnamed>" : entity.name), 子實體數: \(entity.children.count)")
+    
     if entity.components.has(ModelComponent.self) {
       results.append(entity)
+      print("✅ 找到模型實體: \(entity.name.isEmpty ? "<unnamed>" : entity.name)")
     }
     
     for child in entity.children {
       findAllModelEntities(in: child, results: &results)
+    }
+  }
+  
+  // MARK: - Entity Marker System
+  
+  /// 創建文字標籤
+  /// - Parameters:
+  ///   - text: 要顯示的文字
+  ///   - index: 標記索引
+  /// - Returns: 文字標籤實體
+  private func createTextLabel(text: String, index: Int) -> ModelEntity {
+    // 創建文字材質
+    let textMaterial = createTextMaterial(text: text, index: index)
+    
+    // 計算標籤尺寸（根據文字長度動態調整）
+    let baseWidth: Float = 0.025  // 每個字符的基礎寬度
+    let padding: Float = 0.04     // 左右填充
+    let textLength = Float(text.count)
+    let labelWidth = max(textLength * baseWidth + padding, 0.12)  // 最小寬度12cm
+    let labelHeight: Float = 0.05  // 高度5cm
+    
+    // 創建平面標籤（更適合顯示文字）
+    let labelMesh = MeshResource.generatePlane(width: labelWidth, height: labelHeight)
+    
+    let labelEntity = ModelEntity(mesh: labelMesh, materials: [textMaterial])
+    
+    return labelEntity
+  }
+  
+  /// 創建文字紋理材質
+  /// - Parameters:
+  ///   - text: 文字內容
+  ///   - index: 索引用於顏色
+  /// - Returns: 包含文字的材質
+  private func createTextMaterial(text: String, index: Int) -> UnlitMaterial {
+    // 創建文字圖片
+    let textImage = createTextImage(text: text, index: index)
+    
+    // 創建紋理
+    guard let cgImage = textImage.cgImage else {
+      // 如果創建失敗，返回純色材質
+      var fallbackMaterial = UnlitMaterial()
+      fallbackMaterial.color = .init(tint: .black, texture: nil)
+      return fallbackMaterial
+    }
+    
+    let textureResource = try! TextureResource.generate(from: cgImage, options: .init(semantic: .color))
+    
+    // 創建無光照材質（適合UI元素）
+    var material = UnlitMaterial()
+    material.color = .init(texture: .init(textureResource))
+    
+    return material
+  }
+  
+  /// 創建包含文字的圖片
+  /// - Parameters:
+  ///   - text: 文字內容
+  ///   - index: 索引用於顏色
+  /// - Returns: 包含文字的UIImage
+  private func createTextImage(text: String, index: Int) -> UIImage {
+    // 圖片尺寸
+    let imageSize = CGSize(width: 400, height: 100)
+    
+    // 顏色配置
+    let colors: [UIColor] = [.systemRed, .systemBlue, .systemGreen, .systemOrange, 
+                           .systemPurple, .systemPink, .systemCyan, .systemYellow]
+    let borderColor = colors[index % colors.count]
+    let backgroundColor = UIColor.white.withAlphaComponent(0.5)  // 白色背景
+    let textColor = UIColor.black  // 黑色文字
+    
+    // 創建圖形上下文
+    UIGraphicsBeginImageContextWithOptions(imageSize, false, 0)
+    guard let context = UIGraphicsGetCurrentContext() else {
+      UIGraphicsEndImageContext()
+      return UIImage()
+    }
+    
+//    // 繪製背景
+    context.setFillColor(backgroundColor.cgColor)
+    context.fill(CGRect(origin: .zero, size: imageSize))
+    
+    // 繪製彩色邊框
+//    context.setStrokeColor(borderColor.cgColor)
+//    context.setLineWidth(4)
+//    context.stroke(CGRect(x: 2, y: 2, width: imageSize.width - 4, height: imageSize.height - 4))
+    
+    // 設定字體和屬性（增加字體大小以確保可讀性）
+    let fontSize: CGFloat = 48  // 大幅增加字體大小
+    let font = UIFont.systemFont(ofSize: fontSize, weight: .bold)
+    let paragraphStyle = NSMutableParagraphStyle()
+    paragraphStyle.alignment = .center
+    
+    let attributes: [NSAttributedString.Key: Any] = [
+      .font: font,
+      .foregroundColor: textColor,
+      .paragraphStyle: paragraphStyle
+    ]
+    
+    // 計算文字繪製區域
+    let textRect = CGRect(x: 8, y: (imageSize.height - fontSize) / 2 - 2, 
+                         width: imageSize.width - 16, height: fontSize + 4)
+    
+    // 繪製文字
+    text.draw(in: textRect, withAttributes: attributes)
+    
+    // 獲取圖片
+    let image = UIGraphicsGetImageFromCurrentImageContext() ?? UIImage()
+    UIGraphicsEndImageContext()
+    
+    return image
+  }
+  
+  /// 創建實體標記
+  /// - Parameters:
+  ///   - entity: 要標記的實體
+  ///   - index: 標記索引
+  /// - Returns: 標記實體
+  private func createEntityMarker(for entity: Entity, index: Int) -> Entity? {
+    // 獲取實體的視覺邊界
+    let bounds = entity.visualBounds(relativeTo: nil)
+    let entityCenter = bounds.center
+    let entitySize = bounds.extents
+    
+    // 如果尺寸太小，跳過
+    if max(entitySize.x, max(entitySize.y, entitySize.z)) < 0.001 {
+//      print("尺寸太小")
+      return nil
+    }
+    
+    // 創建標記容器
+    let markerContainer = Entity()
+    markerContainer.name = "EntityMarker_\(entity.name.isEmpty ? "unnamed" : entity.name)_\(index)"
+    
+    // 創建球形標記
+    let markerRadius: Float = 0.005  // 2cm 標記球
+    let sphereMesh = MeshResource.generateSphere(radius: markerRadius)
+    
+    // 根據索引選擇顏色
+    let colors: [UIColor] = [.systemRed, .systemBlue, .systemGreen, .systemOrange, 
+                           .systemPurple, .systemPink, .systemCyan, .systemYellow]
+    let markerColor = colors[index % colors.count]
+    
+    var markerMaterial = SimpleMaterial()
+    markerMaterial.color = .init(tint: markerColor, texture: nil)
+    markerMaterial.metallic = 0.8
+    markerMaterial.roughness = 0.2
+    
+    let markerSphere = ModelEntity(mesh: sphereMesh, materials: [markerMaterial])
+    markerSphere.name = "MarkerSphere_\(index)"
+    
+    // 智能標記位置：根據索引分散在不同表面上
+    let offset: Float = 0.03  // 3cm偏移
+    let markerPosition: SIMD3<Float>
+    
+    switch index % 6 {  // 使用6個不同位置循環
+    case 0:  // 前表面
+      markerPosition = SIMD3<Float>(entityCenter.x, entityCenter.y, entityCenter.z + entitySize.z/2 + offset)
+    case 1:  // 後表面  
+      markerPosition = SIMD3<Float>(entityCenter.x, entityCenter.y, entityCenter.z - entitySize.z/2 - offset)
+    case 2:  // 右表面
+      markerPosition = SIMD3<Float>(entityCenter.x + entitySize.x/2 + offset, entityCenter.y, entityCenter.z)
+    case 3:  // 左表面
+      markerPosition = SIMD3<Float>(entityCenter.x - entitySize.x/2 - offset, entityCenter.y, entityCenter.z)
+    case 4:  // 上表面
+      markerPosition = SIMD3<Float>(entityCenter.x, entityCenter.y + entitySize.y/2 + offset, entityCenter.z)
+    case 5:  // 下表面
+      markerPosition = SIMD3<Float>(entityCenter.x, entityCenter.y - entitySize.y/2 - offset, entityCenter.z)
+    default:
+      markerPosition = entityCenter  // fallback
+    }
+    
+//    markerPosition = entityCenter
+    let positionName = ["前", "後", "右", "左", "上", "下"][index % 6]
+    
+    markerContainer.position = markerPosition
+    markerContainer.addChild(markerSphere)
+    
+    // 創建連接線（球體到標籤之間的垂直線）
+    let lineLength: Float = 0.1  // 6cm 連接線
+    let lineThickness: Float = 0.002  // 2mm 線條粗細
+    let lineMesh = MeshResource.generateBox(size: SIMD3<Float>(lineThickness, lineLength, lineThickness))
+    
+    var lineMaterial = SimpleMaterial()
+    lineMaterial.color = .init(tint: markerColor.withAlphaComponent(0.8), texture: nil)  // 使用同樣顏色但稍微透明
+    lineMaterial.metallic = 0.5
+    lineMaterial.roughness = 0.5
+    
+    let connectionLine = ModelEntity(mesh: lineMesh, materials: [lineMaterial])
+    connectionLine.name = "ConnectionLine_\(index)"
+    connectionLine.position = SIMD3<Float>(0, markerRadius + lineLength/2, 0)  // 線的中心位置
+    
+    markerContainer.addChild(connectionLine)
+    
+    // 創建帶有文字的標籤
+    let entityName = entity.name.isEmpty ? "Entity_\(index)" : entity.name
+    let labelEntity = createTextLabel(text: entityName, index: index)
+    labelEntity.name = "MarkerLabel_\(index)"
+    labelEntity.position = SIMD3<Float>(0, markerRadius + lineLength + 0.02, 0)  // 標籤位置調整到連接線上方
+    
+    // 添加 Billboard 組件，讓標籤始終朝向相機
+    labelEntity.components[BillboardComponent.self] = BillboardComponent()
+    
+    markerContainer.addChild(labelEntity)
+    
+    print("🏷️ 已創建標記 [\(index)]: \(entity.name.isEmpty ? "<unnamed>" : entity.name)")
+    print("   📍 實體中心: (\(String(format: "%.3f", entityCenter.x)), \(String(format: "%.3f", entityCenter.y)), \(String(format: "%.3f", entityCenter.z)))m")
+    print("   📍 標記位置: (\(String(format: "%.3f", markerPosition.x)), \(String(format: "%.3f", markerPosition.y)), \(String(format: "%.3f", markerPosition.z)))m")
+    print("   📏 實體尺寸: (\(String(format: "%.3f", entitySize.x)), \(String(format: "%.3f", entitySize.y)), \(String(format: "%.3f", entitySize.z)))m")
+    print("   🎨 顏色: \(markerColor)")
+    print("   🎯 標記面: \(positionName)表面")
+    print("   📐 標記策略: 分散在6個不同表面上，避免重疊，更容易識別各實體位置")
+    
+    return markerContainer
+  }
+  
+  /// 為目標實體創建標記
+  private func createMarkersForAllEntities() {
+    print("🚀 開始創建標記...")
+    
+    // 清除現有標記
+    removeAllMarkers()
+    
+    // 檢查是否有目標實體
+    if discoveredEntities.isEmpty {
+      print("❌ 沒有找到目標實體，請先初始化標記系統")
+      return
+    }
+    
+    print("🎯 準備為 \(discoveredEntities.count) 個目標實體創建標記")
+    
+    // 檢查 realityViewContent 是否存在
+    guard let content = realityViewContent else {
+      print("❌ realityViewContent 為 nil，無法添加標記到場景")
+      return
+    }
+    
+    print("✅ realityViewContent 已準備好")
+    
+    // 為目標實體創建標記（discoveredEntities 已經篩選過）
+    print("🔄 開始迴圈處理 \(discoveredEntities.count) 個目標實體...")
+    
+    for (index, entity) in discoveredEntities.enumerated() {
+      print("🔄 處理實體 [\(index)]: \(entity.name)")
+      
+      if let marker = createEntityMarker(for: entity, index: index) {
+        entityMarkers.append(marker)
+        
+        // 將標記添加到場景根部（不受模型變換影響）
+        content.add(marker)
+        print("✅ 標記 [\(index)] 已添加到場景: \(entity.name)")
+      } else {
+        print("❌ 標記 [\(index)] 創建失敗: \(entity.name)")
+      }
+    }
+    
+    showEntityMarkers = true
+    print("✅ 已創建 \(entityMarkers.count) 個實體標記")
+    
+    // 打印所有標記位置的摘要
+    print("\n📋 === 標記位置摘要 ===")
+    for (index, marker) in entityMarkers.enumerated() {
+      let position = marker.position
+      print("標記[\(index)]: (\(String(format: "%.3f", position.x)), \(String(format: "%.3f", position.y)), \(String(format: "%.3f", position.z)))m - \(marker.name)")
+    }
+    print("📋 === 摘要結束 ===\n")
+  }
+  
+  /// 移除所有標記
+  private func removeAllMarkers() {
+    for marker in entityMarkers {
+      marker.removeFromParent()
+    }
+    entityMarkers.removeAll()
+    showEntityMarkers = false
+    print("🗑️ 已移除所有實體標記")
+  }
+  
+  /// 初始化目標實體（只搜尋，不創建標記）
+  private func initializeTargetEntities() {
+    guard let biplane = biplane else {
+      print("❌ biplane 為 nil，無法初始化標記系統")
+      return
+    }
+    
+    print("✅ biplane 已找到: \(biplane.name)")
+    
+    // 搜尋所有實體
+    discoveredEntities.removeAll()
+    print("🔄 開始搜尋模型實體...")
+    var allEntities: [Entity] = []
+    findAllModelEntities(in: biplane, results: &allEntities)
+    
+    print("🔍 發現 \(allEntities.count) 個模型實體")
+    
+    // 篩選目標實體
+    let targetEntityNames = ["base_telescope", "fly_telescope", "platform", "turntable", "rotator", "wheel_axis"]
+    discoveredEntities = allEntities.filter { entity in
+      targetEntityNames.contains(entity.name)
+    }
+    
+    print("🎯 篩選出 \(discoveredEntities.count) 個目標實體")
+    for (index, entity) in discoveredEntities.enumerated() {
+      print("  [\(index)] \(entity.name)")
+    }
+  }
+  
+  /// 切換標記可見性
+  private func toggleEntityMarkers() {
+    if showEntityMarkers {
+      removeAllMarkers()
+    } else {
+      createMarkersForAllEntities()
     }
   }
   
@@ -1358,6 +1680,12 @@ struct TestRealityKit: View {
             print("🔄 環繞中心: \(orbitCenter)")
             print("✅ 相機已創建並設為活動相機")
             print("🎥 ===== 相機設置完成 =====\n")
+            
+            // 🏷️ 初始化標記系統（但不自動顯示）
+            print("🏷️ ===== 初始化標記系統 =====")
+            // 只搜尋目標實體，不創建標記
+            initializeTargetEntities()
+            print("🏷️ ===== 標記系統初始化完成 =====\n")
           } catch {
             print("載入模型失敗: \(error)")
           }
@@ -1600,6 +1928,133 @@ struct TestRealityKit: View {
             .cornerRadius(8)
             .padding(.horizontal)
           }
+          
+          // 實體標記控制區域
+          VStack(spacing: 12) {
+            // 標題列（可點擊折疊）
+            Button(action: {
+              withAnimation {
+                showMarkerControls.toggle()
+              }
+            }) {
+              HStack {
+                Text("實體標記")
+                  .font(.headline)
+                  .foregroundColor(.primary)
+                Spacer()
+                Image(systemName: showMarkerControls ? "chevron.up" : "chevron.down")
+                  .font(.caption)
+                  .foregroundColor(.secondary)
+              }
+            }
+            .buttonStyle(.plain)
+            
+            if showMarkerControls {
+              // 標記狀態顯示
+              HStack {
+                Text("發現實體:")
+                  .font(.caption)
+                  .foregroundColor(.secondary)
+                Text("\(discoveredEntities.count) 個")
+                  .font(.caption.bold())
+                  .foregroundColor(.blue)
+                
+                Spacer()
+                
+                Text("顯示標記:")
+                  .font(.caption)
+                  .foregroundColor(.secondary)
+                Text("\(entityMarkers.count) 個")
+                  .font(.caption.bold())
+                  .foregroundColor(.green)
+              }
+              
+              // 控制按鈕
+              HStack(spacing: 12) {
+                Button(showEntityMarkers ? "🏷️ 隱藏標記" : "🏷️ 顯示標記") {
+                  toggleEntityMarkers()
+                }
+                .buttonStyle(.bordered)
+                .font(.caption)
+                .foregroundColor(showEntityMarkers ? .red : .green)
+                
+                Button("🔄 重新掃描") {
+                  if showEntityMarkers {
+                    createMarkersForAllEntities()
+                  } else {
+                    // 只更新實體列表，不顯示標記
+                    discoveredEntities.removeAll()
+                    if let biplane = biplane {
+                      findAllModelEntities(in: biplane, results: &discoveredEntities)
+                      // 篩選目標實體用於UI顯示
+                      let targetEntityNames = ["base_telescope", "fly_telescope", "platform", "turntable", "rotator", "wheel_axis"]
+                      discoveredEntities = discoveredEntities.filter { entity in
+                        targetEntityNames.contains(entity.name)
+                      }
+                    }
+                  }
+                }
+                
+                Button("🔍 分析結構") {
+                  printDetailedModelInfo()
+                }
+                .buttonStyle(.bordered)
+                .font(.caption)
+                .foregroundColor(.blue)
+              }
+              
+              // 實體列表（如果有發現的實體）
+              if !discoveredEntities.isEmpty {
+                Text("發現的模型實體:")
+                  .font(.caption)
+                  .foregroundColor(.secondary)
+                
+                ScrollView(.vertical) {
+                  LazyVStack(alignment: .leading, spacing: 4) {
+                    ForEach(Array(discoveredEntities.enumerated()), id: \.offset) { index, entity in
+                      HStack(spacing: 8) {
+                        // 顏色指示器
+                        let colors: [UIColor] = [.systemRed, .systemBlue, .systemGreen, .systemOrange, 
+                                               .systemPurple, .systemPink, .systemCyan, .systemYellow]
+                        let markerColor = colors[index % colors.count]
+                        
+                        Circle()
+                          .fill(Color(markerColor))
+                          .frame(width: 12, height: 12)
+                        
+                        Text("[\(index)]")
+                          .font(.caption2.bold())
+                          .foregroundColor(.secondary)
+                        
+                        Text(entity.name.isEmpty ? "<unnamed>" : entity.name)
+                          .font(.caption2)
+                          .foregroundColor(.primary)
+                        
+                        Spacer()
+                        
+                        // 尺寸資訊
+                        let bounds = entity.visualBounds(relativeTo: nil)
+                        let size = bounds.extents
+                        Text("(\(String(format: "%.2f", size.x)), \(String(format: "%.2f", size.y)), \(String(format: "%.2f", size.z)))")
+                          .font(.caption2)
+                          .foregroundColor(.secondary)
+                      }
+                      .padding(.vertical, 2)
+                      .onTapGesture {
+                        // 點擊實體項目時聚焦到該實體
+                        focusOnEntity(entity, duration: 0.5)
+                      }
+                    }
+                  }
+                }
+                .frame(maxHeight: 120)  // 限制高度，避免佔用太多空間
+              }
+            }
+          }
+          .padding()
+          .background(Color.cyan.opacity(0.15))
+          .cornerRadius(8)
+          .padding(.horizontal)
           
           // base_telescope 控制區域
           if baseTelescope != nil {
