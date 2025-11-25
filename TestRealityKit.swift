@@ -29,7 +29,27 @@ struct TestRealityKit: View {
   @State private var flyTelescope: Entity?
   @State private var originalFlyTelescopeParent: Entity?
   @State private var isFlyBoundToBase: Bool = false
-  
+
+  // front_wheels 控制
+  @State private var frontWheels: Entity?
+  @State private var isWheelRotating: Bool = false
+  @State private var wheelRotationSpeed: Float = 2.0  // 弧度/秒
+  @State private var wheelFrameCount: Int = 0
+  let wheelTimer = Timer.publish(every: 1.0 / 60.0, on: .main, in: .common).autoconnect()
+
+  // 車輛移動控制
+  @State private var vehiclePosition: Float = 0.0  // 當前 Z 軸位置
+  @State private var movementDirection: Float = 1.0  // 1.0 = 前進, -1.0 = 後退
+  @State private var movementRange: Float = 1.0  // 移動範圍（米）
+  @State private var originalGroupPosition: SIMD3<Float> = SIMD3<Float>(0, 0, 0)  // 初始位置
+
+  // 佈景系統
+  @State private var showScenery: Bool = true  // 是否顯示佈景
+  @State private var gridEntity: Entity?  // 地面網格
+  @State private var pillarEntities: [Entity] = []  // 參照柱子
+  @State private var laneMarkings: [Entity] = []  // 道路標線
+  @State private var sceneryContainer: Entity?  // 佈景容器
+
   // 點擊檢測
   @State private var tappedEntity: Entity?
   @State private var tapCoordinates: SIMD3<Float>?
@@ -53,6 +73,7 @@ struct TestRealityKit: View {
   @State private var showTelescopeControls: Bool = false
   @State private var showAnimationControls: Bool = false
   @State private var showEntityInfo: Bool = false
+  @State private var showWheelControls: Bool = false
   
   // 標記系統
   @State private var showEntityMarkers: Bool = true
@@ -304,7 +325,347 @@ struct TestRealityKit: View {
     selectedAnimation = name
     playAnimation()
   }
-  
+
+  // MARK: - Wheel Rotation Functions
+
+  /// 開始輪子旋轉
+  private func startWheelRotation() {
+    guard let wheels = frontWheels else {
+      print("❌ 無法啟動輪子旋轉：未找到 front_wheels 實體")
+      return
+    }
+
+    isWheelRotating = true
+    wheelFrameCount = 0
+    vehiclePosition = 0.0
+    movementDirection = 1.0
+    print("🎡 啟動輪子旋轉，速度: \(wheelRotationSpeed) rad/s")
+    print("🎡 開始時 orientation: \(wheels.orientation)")
+    print("🚗 車輛移動範圍: ±\(movementRange)m")
+  }
+
+  /// 停止輪子旋轉
+  private func stopWheelRotation() {
+    isWheelRotating = false
+    print("🛑 停止輪子旋轉，總幀數: \(wheelFrameCount)")
+
+    // 重置佈景位置（車輛保持不動）
+    resetSceneryPosition()
+    vehiclePosition = 0.0
+    print("🎬 佈景已重置到初始位置")
+  }
+
+  /// 更新輪子旋轉（由 Timer 觸發）
+  private func updateWheelRotation() {
+    guard isWheelRotating, let wheels = frontWheels else { return }
+
+    wheelFrameCount += 1
+
+    // 每秒輸出一次調試信息
+    if wheelFrameCount % 60 == 0 {
+      print("⏰ Frame \(wheelFrameCount) - 位置: \(vehiclePosition), 方向: \(movementDirection > 0 ? "前進" : "後退")")
+    }
+
+    // 計算每幀的旋轉增量
+    let rotationDelta = wheelRotationSpeed / 60.0
+
+    // 繞 X 軸旋轉（向前滾動）
+    let deltaRotation = simd_quatf(angle: rotationDelta * movementDirection, axis: [1, 0, 0])
+
+    // 應用旋轉（累積旋轉）
+    wheels.orientation = wheels.orientation * deltaRotation
+
+    // === 車輛移動邏輯 ===
+    // 假設輪子半徑約 0.1m，每弧度旋轉對應的線性位移
+    let wheelRadius: Float = 0.1
+    let linearMovement = rotationDelta * wheelRadius * movementDirection
+
+    // 更新車輛位置
+    vehiclePosition += linearMovement
+
+    // 檢查是否達到邊界，達到則反向
+    if abs(vehiclePosition) >= movementRange {
+      movementDirection *= -1.0
+      print("🔄 到達邊界，反向移動！位置: \(vehiclePosition)m")
+    }
+
+    // 不移動 group（車輛固定），只更新佈景位置
+    updateSceneryPosition()
+
+    // 第一幀輸出詳細信息
+    if wheelFrameCount == 1 {
+      print("🔄 第一幀:")
+      print("   輪子旋轉增量: \(rotationDelta) rad")
+      print("   車輛位置（虛擬）: \(vehiclePosition)m")
+      print("   佈景偏移: \(-vehiclePosition)m")
+      print("   車輛保持固定，佈景移動")
+    }
+  }
+
+  // MARK: - Scenery Functions
+
+  /// 創建地面網格
+  private func createGridFloor() -> Entity {
+    let gridContainer = Entity()
+    gridContainer.name = "GridFloor"
+
+    // 網格參數（縮小範圍，增加密度）
+    let gridSize: Float = 6.0  // 減小總大小到 6x6m
+    let gridSpacing: Float = 0.3  // 減小間隔到 0.3m
+    let lineCount = Int(gridSize / gridSpacing) + 1
+
+    // 創建材質（鮮豔的顏色更容易看到）
+    var material = SimpleMaterial()
+    material.color = .init(tint: UIColor.cyan.withAlphaComponent(1.0), texture: nil)  // 改用青色，更明顯
+    material.metallic = 0.0
+    material.roughness = 1.0
+
+    // 創建縱向線條（平行於 Z 軸）
+    for i in 0..<lineCount {
+      let x = -gridSize / 2 + Float(i) * gridSpacing
+      let lineMesh = MeshResource.generateBox(width: 0.01, height: 0.01, depth: gridSize)
+      let lineEntity = ModelEntity(mesh: lineMesh, materials: [material])
+      lineEntity.position = SIMD3<Float>(x, 0, 0)  // 改到 y=0 水平面
+      gridContainer.addChild(lineEntity)
+      if i == 0 {
+        print("  創建縱向線 \(i) at (\(x), 0, 0)")
+      }
+    }
+
+    // 創建橫向線條（平行於 X 軸）
+    for i in 0..<lineCount {
+      let z = -gridSize / 2 + Float(i) * gridSpacing
+      let lineMesh = MeshResource.generateBox(width: gridSize, height: 0.01, depth: 0.01)
+      let lineEntity = ModelEntity(mesh: lineMesh, materials: [material])
+      lineEntity.position = SIMD3<Float>(0, 0, z)  // 改到 y=0 水平面
+      gridContainer.addChild(lineEntity)
+    }
+
+    print("✅ 創建地面網格：\(lineCount * 2) 條線")
+    print("   網格大小: \(gridSize)x\(gridSize)m，間隔: \(gridSpacing)m")
+    print("   位置: y=0，顏色: 青色")
+    return gridContainer
+  }
+
+  /// 創建參照柱子
+  private func createReferencePillars() -> [Entity] {
+    var pillars: [Entity] = []
+
+    // 柱子參數（更大、更明顯）
+    let pillarHeight: Float = 0.8  // 更高
+    let pillarWidth: Float = 0.2  // 更寬
+    let pillarSpacing: Float = 1.0  // 減小間隔，更密集
+    let pillarCount = 5  // 減少數量避免太擁擠
+    let sideOffset: Float = 1.2  // 更靠近車道
+
+    // 創建材質（鮮豔的紅色）
+    var material = SimpleMaterial()
+    material.color = .init(tint: UIColor.red.withAlphaComponent(1.0), texture: nil)  // 改用紅色
+    material.metallic = 0.0
+    material.roughness = 1.0
+
+    let pillarMesh = MeshResource.generateBox(width: pillarWidth, height: pillarHeight, depth: pillarWidth)
+
+    // 創建前側柱子（Z 軸正向）
+    for i in 0..<pillarCount {
+      let x = Float(i) * pillarSpacing - Float(pillarCount - 1) * pillarSpacing / 2
+      let pillar = ModelEntity(mesh: pillarMesh, materials: [material])
+      let yPos: Float = pillarHeight / 2  // 從地面（y=0）開始
+      pillar.position = SIMD3<Float>(x, yPos, sideOffset)  // 改成沿 X 軸排列
+      pillar.name = "PillarFront_\(i)"
+      pillars.append(pillar)
+      if i == 0 {
+        print("  創建前柱 \(i) at (\(x), \(yPos), \(sideOffset)) - 沿 X 軸")
+      }
+    }
+
+    // 創建後側柱子（Z 軸負向）
+    for i in 0..<pillarCount {
+      let x = Float(i) * pillarSpacing - Float(pillarCount - 1) * pillarSpacing / 2
+      let pillar = ModelEntity(mesh: pillarMesh, materials: [material])
+      let yPos: Float = pillarHeight / 2  // 從地面（y=0）開始
+      pillar.position = SIMD3<Float>(x, yPos, -sideOffset)  // 改成沿 X 軸排列
+      pillar.name = "PillarBack_\(i)"
+      pillars.append(pillar)
+    }
+
+    print("✅ 創建參照柱子：\(pillars.count) 根（沿 X 軸排列）")
+    print("   柱子尺寸: \(pillarWidth)x\(pillarHeight)m，間隔: \(pillarSpacing)m")
+    print("   顏色: 紅色")
+    return pillars
+  }
+
+  /// 創建道路標線
+  private func createLaneMarkings() -> [Entity] {
+    var markings: [Entity] = []
+
+    // 標線參數（更大、更密集）- 沿 X 軸排列
+    let markingLength: Float = 0.5  // 沿 X 軸的長度
+    let markingWidth: Float = 0.12  // 沿 Z 軸的寬度
+    let markingHeight: Float = 0.05  // Y 軸高度
+    let markingSpacing: Float = 0.6  // X 軸間隔
+    let markingCount = 12  // 增加數量
+
+    // 創建材質（鮮黃色）
+    var material = SimpleMaterial()
+    material.color = .init(tint: UIColor.yellow.withAlphaComponent(1.0), texture: nil)  // 改用黃色
+    material.metallic = 0.0
+    material.roughness = 1.0
+
+    // 調整 mesh：width=X軸, height=Y軸, depth=Z軸
+    let markingMesh = MeshResource.generateBox(width: markingLength, height: markingHeight, depth: markingWidth)
+
+    // 創建中線標記（沿 X 軸排列）
+    for i in 0..<markingCount {
+      let x = Float(i) * markingSpacing - Float(markingCount - 1) * markingSpacing / 2
+      let marking = ModelEntity(mesh: markingMesh, materials: [material])
+      marking.position = SIMD3<Float>(x, 0.01, 0)  // 沿 X 軸排列
+      marking.name = "LaneMarking_\(i)"
+      markings.append(marking)
+      if i == 0 {
+        print("  創建標線 \(i) at (\(x), 0.01, 0) - 沿 X 軸")
+      }
+    }
+
+    print("✅ 創建道路標線：\(markings.count) 個（沿 X 軸排列）")
+    print("   標線尺寸: \(markingLength)x\(markingWidth)m，間隔: \(markingSpacing)m")
+    print("   位置: y=0.01，顏色: 黃色")
+    return markings
+  }
+
+  /// 初始化佈景系統
+  private func setupScenery(in content: RealityViewCameraContent) {
+    let sceneryRoot = Entity()
+    sceneryRoot.name = "SceneryContainer"
+    print("  創建佈景容器：\(sceneryRoot.name)")
+
+    // 創建地面網格
+    print("  開始創建地面網格...")
+    let grid = createGridFloor()
+    sceneryRoot.addChild(grid)
+    gridEntity = grid
+    print("  地面網格已添加，子實體數：\(grid.children.count)")
+
+    // 創建參照柱子
+    print("  開始創建參照柱子...")
+    let pillars = createReferencePillars()
+    for pillar in pillars {
+      sceneryRoot.addChild(pillar)
+    }
+    pillarEntities = pillars
+    print("  參照柱子已添加")
+
+    // 創建道路標線
+    print("  開始創建道路標線...")
+    let markings = createLaneMarkings()
+    for marking in markings {
+      sceneryRoot.addChild(marking)
+    }
+    laneMarkings = markings
+    print("  道路標線已添加")
+
+    // 添加到主容器
+    content.add(sceneryRoot)
+    sceneryContainer = sceneryRoot
+
+    // 根據設定顯示/隱藏
+    sceneryRoot.isEnabled = showScenery
+    print("  佈景顯示狀態：\(showScenery ? "開啟" : "關閉")")
+    print("  佈景容器 isEnabled：\(sceneryRoot.isEnabled)")
+    print("  佈景容器子實體數：\(sceneryRoot.children.count)")
+
+    print("🎬 佈景系統初始化完成")
+  }
+
+  /// 更新佈景位置（佈景移動，車輛固定）- 沿 X 軸
+  private func updateSceneryPosition() {
+    guard showScenery else { return }
+
+    // 佈景向反方向移動（車輛「前進」時佈景向後移動）
+    let sceneryOffset = -vehiclePosition
+
+    // 更新地面網格（沿 X 軸移動）
+    if let grid = gridEntity {
+      // 網格使用模運算實現無限循環
+      let gridCycleLength: Float = 0.3  // 網格間隔（與創建時一致）
+      let xOffset = sceneryOffset.truncatingRemainder(dividingBy: gridCycleLength)
+      grid.position.x = xOffset  // 改成 X 軸
+    }
+
+    // 更新柱子位置（循環移動）- 沿 X 軸
+    let pillarCycleLength: Float = 1.0  // 柱子間隔（與創建時一致）
+    let pillarCount = 5
+    for (index, pillar) in pillarEntities.enumerated() {
+      let isFront = index < pillarCount
+      let localIndex = isFront ? index : (index - pillarCount)
+      let sideOffset: Float = isFront ? 1.2 : -1.2  // Z 軸位置
+
+      // 計算初始 X 位置（改成 X 軸）
+      let baseX = Float(localIndex) * pillarCycleLength - Float(pillarCount - 1) * pillarCycleLength / 2
+
+      // 應用移動偏移並循環
+      var newX = baseX + sceneryOffset
+      let totalLength = Float(pillarCount) * pillarCycleLength
+      newX = newX.truncatingRemainder(dividingBy: totalLength)
+      if newX < -totalLength / 2 {
+        newX += totalLength
+      } else if newX > totalLength / 2 {
+        newX -= totalLength
+      }
+
+      pillar.position = SIMD3<Float>(newX, pillar.position.y, sideOffset)  // X 和 Z 對調
+    }
+
+    // 更新道路標線（循環移動）- 沿 X 軸
+    let markingCycleLength: Float = 0.6  // 標線間隔（與創建時一致）
+    let markingCount = 12
+    for (index, marking) in laneMarkings.enumerated() {
+      // 計算初始 X 位置（改成 X 軸）
+      let baseX = Float(index) * markingCycleLength - Float(markingCount - 1) * markingCycleLength / 2
+
+      // 應用移動偏移並循環
+      var newX = baseX + sceneryOffset
+      let totalLength = Float(markingCount) * markingCycleLength
+      newX = newX.truncatingRemainder(dividingBy: totalLength)
+      if newX < -totalLength / 2 {
+        newX += totalLength
+      } else if newX > totalLength / 2 {
+        newX -= totalLength
+      }
+
+      marking.position = SIMD3<Float>(newX, marking.position.y, 0)  // 沿 X 軸移動
+    }
+  }
+
+  /// 重置佈景到初始位置 - X 軸方向
+  private func resetSceneryPosition() {
+    // 重置地面網格
+    if let grid = gridEntity {
+      grid.position.x = 0  // 改成 X 軸
+    }
+
+    // 重置柱子（沿 X 軸）
+    let pillarSpacing: Float = 1.0  // 與創建時一致
+    let pillarCount = 5
+    for (index, pillar) in pillarEntities.enumerated() {
+      let isFront = index < pillarCount
+      let localIndex = isFront ? index : (index - pillarCount)
+      let sideOffset: Float = isFront ? 1.2 : -1.2  // Z 軸位置
+      let x = Float(localIndex) * pillarSpacing - Float(pillarCount - 1) * pillarSpacing / 2
+      pillar.position = SIMD3<Float>(x, pillar.position.y, sideOffset)  // X 和 Z 對調
+    }
+
+    // 重置道路標線（沿 X 軸）
+    let markingSpacing: Float = 0.6  // 與創建時一致
+    let markingCount = 12
+    for (index, marking) in laneMarkings.enumerated() {
+      let x = Float(index) * markingSpacing - Float(markingCount - 1) * markingSpacing / 2
+      marking.position = SIMD3<Float>(x, marking.position.y, 0)  // 沿 X 軸
+    }
+
+    print("🎬 佈景已重置（X 軸方向）")
+  }
+
   private func printEntityHierarchy(_ entity: Entity, depth: Int) {
     let indent = String(repeating: "  ", count: depth)
     let hasModel = entity.components.has(ModelComponent.self) ? " [Model]" : ""
@@ -1643,14 +2004,18 @@ struct TestRealityKit: View {
             group.position = SIMD3<Float>(0,  -normalizedHeight / 2, 0)
             print("📍 Group 位置: \(group.position)")
             print("📏 標準化後高度: \(normalizedHeight)m")
-            
-            //          // 保存原始狀態
-            //          originalGroupPosition = group.position
-            //          originalGroupScale = scale
-            //          originalGroupOrientation = group.orientation
-            
-            //          rootEntity = loadedBiplane
-            
+
+            // 保存原始位置（用於車輛移動）
+            originalGroupPosition = group.position
+            vehiclePosition = 0.0
+            print("💾 已保存初始位置: \(originalGroupPosition)")
+            print("📏 模型邊界資訊:")
+            print("   Bounding box size (original): \(biplaneBounds.extents)")
+            print("   Bounding box center: \(biplaneBounds.center)")
+            print("   Normalized scale: \(normalizedScale)")
+            print("   Normalized height: \(normalizedHeight)m")
+            print("   Group position: \(group.position)")
+
             // 設定動畫
             setupAnimations()
 
@@ -1690,7 +2055,26 @@ struct TestRealityKit: View {
               print("❌ 未找到 fly_telescope")
             }
             print("🔍 ===== 搜尋完成 =====\n")
-            
+
+            // 查找 front_wheels
+            print("🔍 ===== 開始搜尋 front_wheels =====")
+            if let wheels = findEntityByName("front_wheels", in: loadedBiplane) {
+              frontWheels = wheels
+              print("✅ 找到 front_wheels！")
+              print("   名稱: \(wheels.name)")
+              print("   ID: \(wheels.id)")
+              print("   世界座標: \(wheels.position(relativeTo: nil))")
+              print("   局部座標: \(wheels.position)")
+              print("   父實體: \(wheels.parent?.name ?? "<none>")")
+              print("   子物件數量: \(wheels.children.count)")
+              if let child = wheels.children.first {
+                print("   第一個子實體: \(child.name) (ID: \(child.id))")
+              }
+            } else {
+              print("❌ 未找到 front_wheels")
+            }
+            print("🔍 ===== 搜尋完成 =====\n")
+
             // 為所有實體添加邊界框（為 group 添加，這樣可以看到整體邊界）
             print("\n🎯 ===== 開始添加邊界框 =====")
             addBoundingBoxesToAllEntities(group)
@@ -1738,7 +2122,12 @@ struct TestRealityKit: View {
             print("🔄 環繞中心: \(orbitCenter)")
             print("✅ 相機已創建並設為活動相機")
             print("🎥 ===== 相機設置完成 =====\n")
-            
+
+            // 🎬 初始化佈景系統
+            print("🎬 ===== 初始化佈景系統 =====")
+            setupScenery(in: rvc)
+            print("🎬 ===== 佈景系統設置完成 =====\n")
+
             // 🏷️ 初始化標記系統（但不自動顯示）
             print("🏷️ ===== 初始化標記系統 =====")
             // 只搜尋目標實體，不創建標記
@@ -1756,7 +2145,12 @@ struct TestRealityKit: View {
           tap
             .simultaneously(with: drag)
             .simultaneously(with: pinch)
-        ).border(.red)
+        )
+        .onReceive(wheelTimer) { _ in
+          // 每幀更新輪子旋轉
+          updateWheelRotation()
+        }
+        .border(.red)
         
         // UI 控制層 - 浮動在底部
         VStack {
@@ -2117,7 +2511,213 @@ struct TestRealityKit: View {
           .background(Color.cyan.opacity(0.15))
           .cornerRadius(8)
           .padding(.horizontal)
-          
+
+          // 輪子旋轉控制區域
+          if frontWheels != nil {
+            VStack(spacing: 12) {
+              // 標題列（可點擊折疊）
+              Button(action: {
+                withAnimation {
+                  showWheelControls.toggle()
+                }
+              }) {
+                HStack {
+                  Text("輪子旋轉控制")
+                    .font(.headline)
+                    .foregroundColor(.primary)
+                  Spacer()
+                  Image(systemName: showWheelControls ? "chevron.up" : "chevron.down")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                }
+              }
+              .buttonStyle(.plain)
+
+              if showWheelControls {
+                // 旋轉狀態顯示
+                VStack(spacing: 8) {
+                  HStack {
+                    Text("旋轉狀態:")
+                      .font(.caption)
+                      .foregroundColor(.secondary)
+                    Text(isWheelRotating ? "🎡 旋轉中" : "🛑 已停止")
+                      .font(.caption.bold())
+                      .foregroundColor(isWheelRotating ? .green : .red)
+
+                    Spacer()
+
+                    Text("速度: \(String(format: "%.1f", wheelRotationSpeed)) rad/s")
+                      .font(.caption)
+                      .foregroundColor(.blue)
+                  }
+
+                  if isWheelRotating {
+                    HStack {
+                      Text("車輛位置:")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                      Text("\(String(format: "%.2f", vehiclePosition))m")
+                        .font(.caption.bold())
+                        .foregroundColor(.purple)
+
+                      Spacer()
+
+                      Text(movementDirection > 0 ? "▶︎ 前進" : "◀︎ 後退")
+                        .font(.caption)
+                        .foregroundColor(movementDirection > 0 ? .green : .orange)
+                    }
+                  }
+                }
+
+                // 控制按鈕
+                HStack(spacing: 12) {
+                  Button(isWheelRotating ? "停止旋轉" : "開始旋轉") {
+                    if isWheelRotating {
+                      stopWheelRotation()
+                    } else {
+                      startWheelRotation()
+                    }
+                  }
+                  .buttonStyle(.bordered)
+                  .font(.caption)
+                  .foregroundColor(isWheelRotating ? .red : .green)
+                }
+
+                Divider()
+                  .padding(.vertical, 4)
+
+                // 速度控制
+                VStack(spacing: 8) {
+                  HStack {
+                    Text("旋轉速度")
+                      .font(.caption)
+                      .foregroundColor(.secondary)
+                    Spacer()
+                    Text("\(String(format: "%.1f", wheelRotationSpeed)) rad/s")
+                      .font(.caption.bold())
+                      .foregroundColor(.blue)
+                  }
+
+                  Slider(value: $wheelRotationSpeed, in: 0.5...10.0, step: 0.5)
+                    .tint(.blue)
+
+                  // 速度快速預設按鈕
+                  HStack(spacing: 12) {
+                    Button("慢速 (1.0)") {
+                      wheelRotationSpeed = 1.0
+                    }
+                    .buttonStyle(.bordered)
+                    .font(.caption)
+
+                    Button("中速 (2.0)") {
+                      wheelRotationSpeed = 2.0
+                    }
+                    .buttonStyle(.bordered)
+                    .font(.caption)
+
+                    Button("快速 (5.0)") {
+                      wheelRotationSpeed = 5.0
+                    }
+                    .buttonStyle(.bordered)
+                    .font(.caption)
+
+                    Button("極速 (10.0)") {
+                      wheelRotationSpeed = 10.0
+                    }
+                    .buttonStyle(.bordered)
+                    .font(.caption)
+                  }
+                }
+
+                Divider()
+                  .padding(.vertical, 4)
+
+                // 移動範圍控制
+                VStack(spacing: 8) {
+                  HStack {
+                    Text("移動範圍")
+                      .font(.caption)
+                      .foregroundColor(.secondary)
+                    Spacer()
+                    Text("±\(String(format: "%.1f", movementRange))m")
+                      .font(.caption.bold())
+                      .foregroundColor(.purple)
+                  }
+
+                  Slider(value: $movementRange, in: 0.5...3.0, step: 0.5)
+                    .tint(.purple)
+                    .disabled(isWheelRotating)  // 旋轉中無法調整
+
+                  if isWheelRotating {
+                    Text("提示：停止旋轉後才能調整移動範圍")
+                      .font(.caption2)
+                      .foregroundColor(.orange)
+                  }
+
+                  // 移動範圍快速預設按鈕
+                  HStack(spacing: 12) {
+                    Button("短 (0.5m)") {
+                      movementRange = 0.5
+                    }
+                    .buttonStyle(.bordered)
+                    .font(.caption)
+                    .disabled(isWheelRotating)
+
+                    Button("中 (1.0m)") {
+                      movementRange = 1.0
+                    }
+                    .buttonStyle(.bordered)
+                    .font(.caption)
+                    .disabled(isWheelRotating)
+
+                    Button("長 (2.0m)") {
+                      movementRange = 2.0
+                    }
+                    .buttonStyle(.bordered)
+                    .font(.caption)
+                    .disabled(isWheelRotating)
+                  }
+                }
+
+                Divider()
+                  .padding(.vertical, 4)
+
+                // 佈景控制
+                VStack(spacing: 8) {
+                  HStack {
+                    Text("顯示佈景")
+                      .font(.caption)
+                      .foregroundColor(.secondary)
+
+                    Spacer()
+
+                    Toggle("", isOn: $showScenery)
+                      .labelsHidden()
+                      .onChange(of: showScenery) { _, newValue in
+                        sceneryContainer?.isEnabled = newValue
+                        print("🎬 佈景顯示: \(newValue ? "開啟" : "關閉")")
+                      }
+                  }
+
+                  if showScenery {
+                    HStack(spacing: 8) {
+                      Image(systemName: "square.grid.3x3")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                      Text("地面網格 + 參照柱子 + 道路標線")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                    }
+                  }
+                }
+              }
+            }
+            .padding()
+            .background(Color.orange.opacity(0.15))
+            .cornerRadius(8)
+            .padding(.horizontal)
+          }
+
           // base_telescope 控制區域
           if baseTelescope != nil {
             VStack(spacing: 12) {
