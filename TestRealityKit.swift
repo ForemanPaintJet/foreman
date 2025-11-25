@@ -500,54 +500,39 @@ struct TestRealityKit: View {
     let markerSphere = ModelEntity(mesh: sphereMesh, materials: [markerMaterial])
     markerSphere.name = "MarkerSphere_\(index)"
     
-    // 智能標記位置：根據索引分散在不同表面上
-    let offset: Float = 0.0  // 3cm偏移
-    let markerPosition: SIMD3<Float>
-    
-    switch index % 6 {  // 使用6個不同位置循環
-    case 0:  // 前表面
-      markerPosition = SIMD3<Float>(entityCenter.x, entityCenter.y, entityCenter.z + entitySize.z/2 + offset)
-    case 1:  // 後表面  
-      markerPosition = SIMD3<Float>(entityCenter.x, entityCenter.y, entityCenter.z - entitySize.z/2 - offset)
-    case 2:  // 右表面
-      markerPosition = SIMD3<Float>(entityCenter.x + entitySize.x/2 + offset, entityCenter.y, entityCenter.z)
-    case 3:  // 左表面
-      markerPosition = SIMD3<Float>(entityCenter.x - entitySize.x/2 - offset, entityCenter.y, entityCenter.z)
-    case 4:  // 上表面
-      markerPosition = SIMD3<Float>(entityCenter.x, entityCenter.y + entitySize.y/2 + offset, entityCenter.z)
-    case 5:  // 下表面
-      markerPosition = SIMD3<Float>(entityCenter.x, entityCenter.y - entitySize.y/2 - offset, entityCenter.z)
-    default:
-      markerPosition = entityCenter  // fallback
-    }
-    
-//    markerPosition = entityCenter
-    let positionName = ["前", "後", "右", "左", "上", "下"][index % 6]
-    
+    // 統一標記位置：放在實體上方，避免被遮擋
+    let verticalOffset: Float = 0.15  // 向上偏移 15cm，確保不被遮擋
+    let markerPosition = SIMD3<Float>(
+      entityCenter.x,
+      entityCenter.y + entitySize.y/2 + verticalOffset,
+      entityCenter.z
+    )
+
     markerContainer.position = markerPosition
     markerContainer.addChild(markerSphere)
     
-    // 創建連接線（球體到標籤之間的垂直線）
-    let lineLength: Float = 0.1  // 6cm 連接線
+    // 創建連接線（從 marker 向下連接到實體）
+    let lineLength: Float = verticalOffset  // 連接線長度 = 垂直偏移距離
     let lineThickness: Float = 0.002  // 2mm 線條粗細
     let lineMesh = MeshResource.generateBox(size: SIMD3<Float>(lineThickness, lineLength, lineThickness))
-    
+
     var lineMaterial = SimpleMaterial()
     lineMaterial.color = .init(tint: markerColor.withAlphaComponent(0.8), texture: nil)  // 使用同樣顏色但稍微透明
     lineMaterial.metallic = 0.5
     lineMaterial.roughness = 0.5
-    
+
     let connectionLine = ModelEntity(mesh: lineMesh, materials: [lineMaterial])
     connectionLine.name = "ConnectionLine_\(index)"
-    connectionLine.position = SIMD3<Float>(0, markerRadius + lineLength/2, 0)  // 線的中心位置
-    
+    // 連接線從球體下方向下延伸
+    connectionLine.position = SIMD3<Float>(0, -markerRadius - lineLength/2, 0)
+
     markerContainer.addChild(connectionLine)
-    
-    // 創建帶有文字的標籤
+
+    // 創建帶有文字的標籤（放在球體上方）
     let entityName = entity.name.isEmpty ? "Entity_\(index)" : entity.name
     let labelEntity = createTextLabel(text: entityName, index: index)
     labelEntity.name = "MarkerLabel_\(index)"
-    labelEntity.position = SIMD3<Float>(0, markerRadius + lineLength + 0.02, 0)  // 標籤位置調整到連接線上方
+    labelEntity.position = SIMD3<Float>(0, markerRadius + 0.02, 0)  // 標籤位置在球體正上方
     
     // 添加 Billboard 組件，讓標籤始終朝向相機
     labelEntity.components[BillboardComponent.self] = BillboardComponent()
@@ -559,8 +544,7 @@ struct TestRealityKit: View {
     print("   📍 標記位置: (\(String(format: "%.3f", markerPosition.x)), \(String(format: "%.3f", markerPosition.y)), \(String(format: "%.3f", markerPosition.z)))m")
     print("   📏 實體尺寸: (\(String(format: "%.3f", entitySize.x)), \(String(format: "%.3f", entitySize.y)), \(String(format: "%.3f", entitySize.z)))m")
     print("   🎨 顏色: \(markerColor)")
-    print("   🎯 標記面: \(positionName)表面")
-    print("   📐 標記策略: 分散在6個不同表面上，避免重疊，更容易識別各實體位置")
+    print("   📐 標記策略: 統一放置於實體上方（+Y軸），避免被遮擋")
     
     return markerContainer
   }
@@ -1364,10 +1348,18 @@ struct TestRealityKit: View {
     // 獲取實體邊界
     let bounds = entity.visualBounds(relativeTo: nil)
     let entityCenter = bounds.center
-    let maxDimension = max(bounds.extents.x, max(bounds.extents.y, bounds.extents.z))
+    let entityExtents = bounds.extents
+
+    // 🎯 考慮 marker 的總高度（verticalOffset + sphere + label）
+    let markerTotalHeight: Float = 0.20
+    let adjustedHeight = entityExtents.y + markerTotalHeight
+
+    // 使用調整後的高度計算最大維度
+    let maxDimension = max(entityExtents.x, max(adjustedHeight, entityExtents.z))
 
     print("📏 實體中心: \(entityCenter)")
-    print("📏 最大維度: \(maxDimension)m")
+    print("📏 原始最大維度: \(max(entityExtents.x, max(entityExtents.y, entityExtents.z)))m")
+    print("📏 調整後最大維度（含 marker）: \(maxDimension)m")
 
     // 計算最佳距離
     let optimalDistance = calculateOptimalDistance(objectSize: maxDimension, fovDegrees: cameraFOV)
