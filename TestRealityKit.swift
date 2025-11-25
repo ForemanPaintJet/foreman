@@ -651,6 +651,42 @@ struct TestRealityKit: View {
     }
   }
 
+  /// 響應式更新 marker 顯示（供 RealityView update closure 使用）
+  private func updateMarkersInScene(_ content: RealityViewCameraContent) {
+    for (index, marker) in entityMarkers.enumerated() {
+      let shouldShow = showEntityMarkers &&
+                       focusedEntity != nil &&
+                       index < discoveredEntities.count &&
+                       discoveredEntities[index] == focusedEntity
+
+      if shouldShow && marker.parent == nil {
+        content.add(marker)
+      } else if !shouldShow && marker.parent != nil {
+        marker.removeFromParent()
+      }
+    }
+  }
+
+  /// 響應式更新 focus outline（供 RealityView update closure 使用）
+  private func updateFocusOutlineInScene() {
+    if let focused = focusedEntity {
+      // 如果輪廓不存在或綁定到不同實體，重新創建
+      if focusOutlineEntity?.parent != focused {
+        focusOutlineEntity?.removeFromParent()
+//        if let newOutline = createFocusOutline(for: focused) {
+//          focused.addChild(newOutline)
+//          focusOutlineEntity = newOutline
+//        }
+      }
+    } else {
+      // 沒有聚焦實體，移除輪廓
+      if focusOutlineEntity != nil {
+        focusOutlineEntity?.removeFromParent()
+        focusOutlineEntity = nil
+      }
+    }
+  }
+
   /// 初始化目標實體並自動建立標記
   private func initializeTargetEntities() {
     guard let biplane = biplane else {
@@ -1338,12 +1374,11 @@ struct TestRealityKit: View {
 
     print("🎯 聚焦到實體: \(entity.name.isEmpty ? "<unnamed>" : entity.name)")
 
-    // 🗑️ 移除之前的聚焦輪廓並重置顏色（如果存在）
+    // 🗑️ 重置之前聚焦實體的顏色（如果存在）
     if let previousEntity = focusedEntity, previousEntity != entity {
       resetEntityColor(previousEntity)
       print("🔄 重置之前聚焦實體的顏色")
     }
-    removeFocusOutline()
 
     // 獲取實體邊界
     let bounds = entity.visualBounds(relativeTo: nil)
@@ -1399,19 +1434,9 @@ struct TestRealityKit: View {
     // 讓相機看向實體中心
     cameraEntity.look(at: entityCenter, from: newPosition, relativeTo: nil)
 
-    // 🌟 為聚焦實體添加金色輪廓
-    if let outline = createFocusOutline(for: entity) {
-      entity.addChild(outline)
-      focusOutlineEntity = outline
-      print("✨ 已添加金色聚焦輪廓")
-    }
-
-    // 🎯 設置為聚焦實體（在重置舊實體顏色之後）
+    // 🎯 設置為聚焦實體（outline 會由 update closure 自動管理）
     focusedEntity = entity
     print("🎯 已設置聚焦實體")
-
-    // 更新標記可見性（只顯示聚焦實體的標記）
-    updateMarkerVisibility()
 
     print("✅ 聚焦完成")
   }
@@ -1565,14 +1590,8 @@ struct TestRealityKit: View {
     // 重置實體顏色
     resetEntityColor(entity)
 
-    // 移除聚焦輪廓
-    removeFocusOutline()
-
-    // 清除聚焦實體
+    // 清除聚焦實體（outline 會由 update closure 自動管理）
     focusedEntity = nil
-
-    // 更新標記可見性（隱藏所有標記）
-    updateMarkerVisibility()
 
     print("✅ 聚焦已釋放")
   }
@@ -1728,6 +1747,10 @@ struct TestRealityKit: View {
           } catch {
             print("載入模型失敗: \(error)")
           }
+        } update: { content in
+          // 響應式更新場景
+          updateMarkersInScene(content)
+          updateFocusOutlineInScene()
         }
         .gesture(
           tap
