@@ -55,7 +55,7 @@ struct TestRealityKit: View {
   @State private var showEntityInfo: Bool = false
   
   // 標記系統
-  @State private var showEntityMarkers: Bool = false
+  @State private var showEntityMarkers: Bool = true
   @State private var entityMarkers: [Entity] = []
   @State private var discoveredEntities: [Entity] = []
   @State private var showMarkerControls: Bool = false
@@ -501,7 +501,7 @@ struct TestRealityKit: View {
     markerSphere.name = "MarkerSphere_\(index)"
     
     // 智能標記位置：根據索引分散在不同表面上
-    let offset: Float = 0.03  // 3cm偏移
+    let offset: Float = 0.0  // 3cm偏移
     let markerPosition: SIMD3<Float>
     
     switch index % 6 {  // 使用6個不同位置循環
@@ -593,21 +593,18 @@ struct TestRealityKit: View {
     
     for (index, entity) in discoveredEntities.enumerated() {
       print("🔄 處理實體 [\(index)]: \(entity.name)")
-      
+
       if let marker = createEntityMarker(for: entity, index: index) {
         entityMarkers.append(marker)
-        
-        // 將標記添加到場景根部（不受模型變換影響）
-        content.add(marker)
-        print("✅ 標記 [\(index)] 已添加到場景: \(entity.name)")
+        print("✅ 標記 [\(index)] 已創建（尚未添加到場景）: \(entity.name)")
       } else {
         print("❌ 標記 [\(index)] 創建失敗: \(entity.name)")
       }
     }
-    
+
     showEntityMarkers = true
     print("✅ 已創建 \(entityMarkers.count) 個實體標記")
-    
+
     // 打印所有標記位置的摘要
     print("\n📋 === 標記位置摘要 ===")
     for (index, marker) in entityMarkers.enumerated() {
@@ -615,6 +612,9 @@ struct TestRealityKit: View {
       print("標記[\(index)]: (\(String(format: "%.3f", position.x)), \(String(format: "%.3f", position.y)), \(String(format: "%.3f", position.z)))m - \(marker.name)")
     }
     print("📋 === 摘要結束 ===\n")
+
+    // 根據當前聚焦狀態更新標記可見性
+    updateMarkerVisibility()
   }
   
   /// 移除所有標記
@@ -626,34 +626,75 @@ struct TestRealityKit: View {
     showEntityMarkers = false
     print("🗑️ 已移除所有實體標記")
   }
-  
-  /// 初始化目標實體（只搜尋，不創建標記）
+
+  /// 更新標記可見性（只顯示聚焦實體的標記）
+  private func updateMarkerVisibility() {
+    guard showEntityMarkers else {
+      print("⚠️ 標記功能未開啟，跳過可見性更新")
+      return
+    }
+
+    guard let content = realityViewContent else {
+      print("❌ realityViewContent 為 nil，無法更新標記可見性")
+      return
+    }
+
+    print("🔄 開始更新標記可見性...")
+
+    for (index, marker) in entityMarkers.enumerated() {
+      if let focused = focusedEntity,
+        index < discoveredEntities.count,
+        discoveredEntities[index] == focused
+      {
+        // 顯示聚焦實體的標記
+        if marker.parent == nil {
+          content.add(marker)
+          print("✅ 顯示標記 [\(index)]: \(discoveredEntities[index].name)")
+        }
+      } else {
+        // 隱藏其他標記
+        if marker.parent != nil {
+          marker.removeFromParent()
+          print("🔽 隱藏標記 [\(index)]")
+        }
+      }
+    }
+
+    if focusedEntity == nil {
+      print("⚠️ 沒有聚焦實體，所有標記已隱藏")
+    } else {
+      print("✅ 標記可見性更新完成")
+    }
+  }
+
+  /// 初始化目標實體並自動建立標記
   private func initializeTargetEntities() {
     guard let biplane = biplane else {
       print("❌ biplane 為 nil，無法初始化標記系統")
       return
     }
-    
+
     print("✅ biplane 已找到: \(biplane.name)")
-    
+
     // 搜尋所有實體
     discoveredEntities.removeAll()
     print("🔄 開始搜尋模型實體...")
     var allEntities: [Entity] = []
     findAllModelEntities(in: biplane, results: &allEntities)
-    
+
     print("🔍 發現 \(allEntities.count) 個模型實體")
-    
+
     // 篩選目標實體
     let targetEntityNames = ["base_telescope", "fly_telescope", "platform", "turntable", "rotator", "wheel_axis"]
-    discoveredEntities = allEntities.filter { entity in
-      targetEntityNames.contains(entity.name)
-    }
-    
+    discoveredEntities = allEntities
+
     print("🎯 篩選出 \(discoveredEntities.count) 個目標實體")
     for (index, entity) in discoveredEntities.enumerated() {
       print("  [\(index)] \(entity.name)")
     }
+
+    // 自動建立標記（但只在 focus 時顯示）
+    createMarkersForAllEntities()
   }
   
   /// 切換標記可見性
@@ -1377,6 +1418,9 @@ struct TestRealityKit: View {
     focusedEntity = entity
     print("🎯 已設置聚焦實體")
 
+    // 更新標記可見性（只顯示聚焦實體的標記）
+    updateMarkerVisibility()
+
     print("✅ 聚焦完成")
   }
   
@@ -1534,6 +1578,9 @@ struct TestRealityKit: View {
 
     // 清除聚焦實體
     focusedEntity = nil
+
+    // 更新標記可見性（隱藏所有標記）
+    updateMarkerVisibility()
 
     print("✅ 聚焦已釋放")
   }
