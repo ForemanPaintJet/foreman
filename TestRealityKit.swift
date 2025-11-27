@@ -51,13 +51,9 @@ struct TestRealityKit: View {
   @State private var sceneryContainer: Entity?  // 佈景容器
 
   // 點擊檢測
-  @State private var tappedEntity: Entity?
   @State private var tapCoordinates: SIMD3<Float>?
   @State private var highlightedEntities: Set<Entity> = []
-  
-  // 按壓-釋放檢測
-  @State private var pressedEntity: Entity?
-  @State private var hasHighlightedOnPress: Bool = false
+  @State private var originalMaterials: [Entity.ID: [RealityKit.Material]] = [:]
   
   // 物件尺寸資訊
   @State private var modelOriginalSize: SIMD3<Float> = SIMD3<Float>(0, 0, 0)
@@ -245,7 +241,7 @@ struct TestRealityKit: View {
         // 更新相機位置（環繞模型）
         updateCameraOrbit()
       }.onEnded { _ in
-        handleEntityRelease()
+//        handleEntityRelease()
       }
   }
   
@@ -253,13 +249,15 @@ struct TestRealityKit: View {
     DragGesture(minimumDistance: 0)
       .targetedToAnyEntity()
       .onChanged { value in
-        // 只在第一次按下時高亮顯示
-        if !hasHighlightedOnPress {
+        // 只在點擊不同實體時處理
+        if focusedEntity != value.entity {
           handleEntityPress(value.entity)
         }
       }
       .onEnded { _ in
-        handleEntityRelease()
+//        if let focusedEntity {
+//          resetEntityColor(focusedEntity)
+//        }
       }
   }
   
@@ -1277,12 +1275,9 @@ struct TestRealityKit: View {
     
     // 高亮顯示按下的實體
     highlightEntity(entity)
-    pressedEntity = entity
-    hasHighlightedOnPress = true
-    
-    tappedEntity = entity
+
     tapCoordinates = entity.position(relativeTo: nil)
-    
+
     // ⭐ 自動聚焦到點擊的實體（focusedEntity 會在 focusOnEntity 內部設置）
     focusOnEntity(entity, duration: 0.5)
     
@@ -1294,17 +1289,8 @@ struct TestRealityKit: View {
   }
   
   private func handleEntityRelease() {
-    if let entity = pressedEntity {
-      print("👆 釋放實體: \(entity.name.isEmpty ? "<unnamed>" : entity.name)")
-      // 只在實體不是聚焦實體時重置顏色（聚焦實體保持藍色高亮）
-      if entity != focusedEntity {
-        resetEntityColor(entity)
-      } else {
-        print("💎 保持聚焦實體的藍色高亮")
-      }
-    }
-    pressedEntity = nil
-    hasHighlightedOnPress = false
+    // Entity remains selected and highlighted until explicit release via button
+    // No state changes needed here
   }
   
   private func getEntityPath(_ entity: Entity) -> String {
@@ -1385,23 +1371,75 @@ struct TestRealityKit: View {
     }
   }
   
+  // 遞迴保存所有實體的原始材質
+  private func saveOriginalMaterials(for entity: Entity) {
+    // 如果這個實體有 ModelComponent，保存它的材質
+    if entity.components.has(ModelComponent.self),
+       let modelComponent = entity.components[ModelComponent.self] {
+      // 只在還沒保存過時才保存
+      
+      if originalMaterials[entity.id] == nil {
+        let entityName = entity.name.isEmpty ? "<unnamed>" : entity.name
+
+        // 深拷貝材質以避免 reference type 問題
+        let copiedMaterials = modelComponent.materials.map { material -> RealityKit.Material in
+          if var pbr = material as? PhysicallyBasedMaterial {
+            pbr.baseColor.tint = .white
+            return pbr
+          } else if let simple = material as? SimpleMaterial {
+            // SimpleMaterial 是 struct，直接複製即可
+            return simple
+          } else {
+            // 其他類型材質
+            return material
+          }
+        }
+
+        originalMaterials[entity.id] = copiedMaterials
+        print("💾 預先保存原始材質 '\(entityName)' - \(copiedMaterials.count) 個材質（已深拷貝）")
+      }
+    }
+
+    // 遞迴處理所有子實體
+    for child in entity.children {
+      saveOriginalMaterials(for: child)
+    }
+  }
+
   private func highlightEntity(_ entity: Entity) {
     guard entity.components.has(ModelComponent.self) else { return }
     guard var modelComponent = entity.components[ModelComponent.self] else { return }
+
+    let entityName = entity.name.isEmpty ? "<unnamed>" : entity.name
+
+    // 保存原始材質（如果還沒保存過）- 這是 fallback，正常情況下應該已經在載入時保存了
+    if originalMaterials[entity.id] == nil {
+      print("⚠️ 延遲保存原始材質 '\(entityName)' - 材質數量: \(modelComponent.materials.count)")
+
+      // 顯示保存前的材質詳細資訊
+      for (index, material) in modelComponent.materials.enumerated() {
+        if let simpleMat = material as? SimpleMaterial {
+          print("  📦 保存前[\(index)]: SimpleMaterial - tint: \(simpleMat.color.tint), metallic: \(simpleMat.metallic), roughness: \(simpleMat.roughness)")
+        } else if let pbr = material as? PhysicallyBasedMaterial {
+          print("  📦 保存前[\(index)]: PhysicallyBasedMaterial - baseColor.tint: \(pbr.baseColor.tint), metallic: \(pbr.metallic), roughness: \(pbr.roughness)")
+        } else {
+          print("  📦 保存前[\(index)]: \(type(of: material))")
+        }
+      }
+
+      originalMaterials[entity.id] = modelComponent.materials
+      print("  💾 已保存到 originalMaterials[\(entity.id)]")
+    } else {
+      print("ℹ️ 跳過保存，原始材質已存在 '\(entityName)'")
+    }
     
-    // 使用固定的藍色來高亮顯示
-    let color = UIColor.systemBlue
-    
-    // 創建高亮材質
-    var material = SimpleMaterial()
-    material.color = .init(tint: color, texture: nil)
-    material.metallic = 0.3
-    material.roughness = 0.5
-    
+    var highlightMaterial = PhysicallyBasedMaterial()
+    highlightMaterial.baseColor.tint = .blue
+
     // 應用材質
-    modelComponent.materials = [material]
+    modelComponent.materials = [highlightMaterial]
     entity.components[ModelComponent.self] = modelComponent
-    
+
     // 記錄已高亮的實體
     highlightedEntities.insert(entity)
     
@@ -1411,19 +1449,58 @@ struct TestRealityKit: View {
   private func resetEntityColor(_ entity: Entity) {
     guard entity.components.has(ModelComponent.self) else { return }
     guard var modelComponent = entity.components[ModelComponent.self] else { return }
-    
-    // 恢復到原始材質（移除顏色覆蓋）
-    var material = SimpleMaterial()
-    material.color = .init(tint: .white, texture: nil)
-    material.metallic = 0.1
-    material.roughness = 0.9
-    
-    modelComponent.materials = [material]
-    entity.components[ModelComponent.self] = modelComponent
-    
+
+    let entityName = entity.name.isEmpty ? "<unnamed>" : entity.name
+
+    // 恢復到原始材質（如果有保存的話）
+    if let savedMaterials = originalMaterials[entity.id] {
+      print("🔄 開始恢復原始材質 '\(entityName)'")
+      print("  從 originalMaterials[\(entity.id)] 讀取 \(savedMaterials.count) 個材質")
+
+      // 顯示恢復前當前的材質
+      print("  當前材質 (\(modelComponent.materials.count) 個):")
+      for (index, material) in modelComponent.materials.enumerated() {
+        if let simpleMat = material as? SimpleMaterial {
+          print("    🔵 當前[\(index)]: SimpleMaterial - tint: \(simpleMat.color.tint)")
+        } else if let pbr = material as? PhysicallyBasedMaterial {
+          print("    🔵 當前[\(index)]: PhysicallyBasedMaterial - baseColor.tint: \(pbr.baseColor.tint)")
+        }
+      }
+
+      // 顯示將要恢復的材質詳細資訊
+      print("  將恢復的材質 (\(savedMaterials.count) 個):")
+      for (index, material) in savedMaterials.enumerated() {
+        if let simpleMat = material as? SimpleMaterial {
+          print("    ✅ 恢復[\(index)]: SimpleMaterial - tint: \(simpleMat.color.tint), metallic: \(simpleMat.metallic), roughness: \(simpleMat.roughness)")
+        } else if let pbr = material as? PhysicallyBasedMaterial {
+          print("    ✅ 恢復[\(index)]: PhysicallyBasedMaterial - baseColor.tint: \(pbr.baseColor.tint), metallic: \(pbr.metallic), roughness: \(pbr.roughness)")
+        } else {
+          print("    ✅ 恢復[\(index)]: \(type(of: material))")
+        }
+      }
+
+      modelComponent.materials = savedMaterials
+      entity.components[ModelComponent.self] = modelComponent
+
+      print("  ✅ 已應用材質到 entity.components")
+      originalMaterials.removeValue(forKey: entity.id)
+      print("  🗑️ 已清除 originalMaterials[\(entity.id)]")
+    } else {
+      // 如果沒有保存原始材質，則設置為白色（fallback）
+      var material = SimpleMaterial()
+      material.color = .init(tint: .white, texture: nil)
+      material.metallic = 0.1
+      material.roughness = 0.9
+
+      print("⚠️ 未找到原始材質 '\(entityName)'，使用 fallback")
+      print("  從: 藍色高亮 (或其他狀態)")
+      print("  到: 白色 fallback (SimpleMaterial, metallic: 0.1, roughness: 0.9)")
+
+      modelComponent.materials = [material]
+      entity.components[ModelComponent.self] = modelComponent
+    }
+
     highlightedEntities.remove(entity)
-    
-    print("🔄 重置組件顏色 '\(entity.name.isEmpty ? "<unnamed>" : entity.name)'")
   }
   
   private func setupModelBounds(for entity: Entity) -> Float {
@@ -1954,6 +2031,9 @@ struct TestRealityKit: View {
     // 清除聚焦實體（outline 會由 update closure 自動管理）
     focusedEntity = nil
 
+    // 清除點擊座標以隱藏資訊面板
+    tapCoordinates = nil
+
     print("✅ 聚焦已釋放")
   }
   
@@ -1976,10 +2056,13 @@ struct TestRealityKit: View {
             
             // 先生成碰撞形狀
             loadedBiplane.generateCollisionShapes(recursive: true)
-            
+
             // 配置點擊檢測
             configureInputTarget(loadedBiplane)
-            
+
+            // 💾 保存所有實體的原始材質
+            saveOriginalMaterials(for: loadedBiplane)
+
             group.addChild(loadedBiplane)
             rvc.add(group)
 
@@ -2058,7 +2141,7 @@ struct TestRealityKit: View {
 
             // 查找 front_wheels
             print("🔍 ===== 開始搜尋 front_wheels =====")
-            if let wheels = findEntityByName("front_wheels", in: loadedBiplane) {
+            if let wheels = findEntityByName("front_wheels_1", in: loadedBiplane) {
               frontWheels = wheels
               print("✅ 找到 front_wheels！")
               print("   名稱: \(wheels.name)")
@@ -2137,7 +2220,8 @@ struct TestRealityKit: View {
             print("載入模型失敗: \(error)")
           }
         } update: { content in
-          // 響應式更新場景
+//          // 響應式更新場景
+          print("update")
           updateMarkersInScene(content)
           updateFocusOutlineInScene()
         }
@@ -2153,9 +2237,10 @@ struct TestRealityKit: View {
         .border(.red)
         
         // UI 控制層 - 浮動在底部
+        /*
         VStack {
           Spacer()
-          
+
           // 🎥 相機控制區域
           VStack(spacing: 12) {
             // 標題列（可點擊折疊）
@@ -2881,7 +2966,7 @@ struct TestRealityKit: View {
           }
           
           // 點擊資訊顯示
-          if let entity = tappedEntity, let coordinates = tapCoordinates {
+          if let entity = focusedEntity, let coordinates = tapCoordinates {
             VStack(alignment: .leading, spacing: 8) {
               // 標題列（可點擊折疊）
               Button(action: {
@@ -2902,17 +2987,6 @@ struct TestRealityKit: View {
               .buttonStyle(.plain)
               
               if showEntityInfo {
-                // 清除按鈕
-                HStack {
-                  Spacer()
-                  Button("清除") {
-                    tappedEntity = nil
-                    tapCoordinates = nil
-                  }
-                  .font(.caption)
-                  .buttonStyle(.bordered)
-                }
-                
                 VStack(alignment: .leading, spacing: 4) {
                   HStack {
                     Text("名稱:")
@@ -3105,6 +3179,7 @@ struct TestRealityKit: View {
           .cornerRadius(8)
           .padding(.horizontal)
         }
+        */
 
         // 📊 相機資訊 - 浮動在左上角
         VStack {
@@ -3158,24 +3233,54 @@ struct TestRealityKit: View {
           Spacer()
         }
 
-        // 🔄 重置相機按鈕 - 浮動在右上角
+        // 🎮 動態控制面板 - 浮動在頂部中央
+        if let entity = focusedEntity {
+          VStack {
+            HStack {
+              Spacer()
+              dynamicControlPanel(for: entity)
+              Spacer()
+            }
+            .padding(.top, 20)
+            Spacer()
+          }
+        }
+
+        // 🔄 重置相機按鈕和釋放焦點按鈕 - 浮動在右上角
         if focusedEntity != nil {
           VStack {
             HStack {
               Spacer()
 
-              Button(action: {
-                resetCameraView()
-              }) {
-                Image(systemName: "arrow.counterclockwise.circle.fill")
-                  .font(.title2)
-                  .foregroundColor(.white)
-                  .padding(12)
-                  .background(Color.orange.opacity(0.8))
-                  .clipShape(Circle())
-                  .shadow(color: .black.opacity(0.3), radius: 4, x: 0, y: 2)
+              VStack(spacing: 12) {
+                // 重置相機按鈕
+                Button(action: {
+                  resetCameraView()
+                }) {
+                  Image(systemName: "arrow.counterclockwise.circle.fill")
+                    .font(.title2)
+                    .foregroundColor(.white)
+                    .padding(12)
+                    .background(Color.orange.opacity(0.8))
+                    .clipShape(Circle())
+                    .shadow(color: .black.opacity(0.3), radius: 4, x: 0, y: 2)
+                }
+                .buttonStyle(.plain)
+
+                // 釋放焦點按鈕
+                Button(action: {
+                  releaseFocus()
+                }) {
+                  Image(systemName: "xmark.circle.fill")
+                    .font(.title2)
+                    .foregroundColor(.white)
+                    .padding(12)
+                    .background(Color.red.opacity(0.8))
+                    .clipShape(Circle())
+                    .shadow(color: .black.opacity(0.3), radius: 4, x: 0, y: 2)
+                }
+                .buttonStyle(.plain)
               }
-              .buttonStyle(.plain)
               .padding(.trailing, 20)
               .padding(.top, 20)
             }
@@ -3183,6 +3288,425 @@ struct TestRealityKit: View {
           }
         }
       }
+    }
+  }
+
+  // MARK: - Dynamic Control Panel
+  @ViewBuilder
+  private func dynamicControlPanel(for entity: Entity) -> some View {
+    VStack(spacing: 12) {
+      // 實體名稱標題
+      Text(entity.name.isEmpty ? "Unknown Entity" : entity.name)
+        .font(.headline)
+        .foregroundColor(.white)
+
+      Divider()
+        .background(Color.white.opacity(0.5))
+
+      // 根據實體名稱顯示不同的控制
+      switch entity.name {
+      case "front_wheels_1":
+        wheelsControlView()
+      case "base_telescope":
+        baseTelescopeControlView()
+      case "fly_telescope":
+        flyTelescopeControlView()
+      default:
+        genericControlView(for: entity)
+      }
+    }
+    .padding(16)
+    .background(Color.black.opacity(0.75))
+    .cornerRadius(12)
+    .shadow(color: .black.opacity(0.5), radius: 10, x: 0, y: 4)
+  }
+
+  // MARK: - Wheels Control View
+  @ViewBuilder
+  private func wheelsControlView() -> some View {
+    VStack(spacing: 10) {
+      // 狀態顯示
+      HStack {
+        Text("狀態:")
+          .font(.caption)
+          .foregroundColor(.white.opacity(0.8))
+        if isWheelRotating {
+          Text(movementDirection > 0 ? "▶︎ 前進中" : "◀︎ 後退中")
+            .font(.caption.bold())
+            .foregroundColor(movementDirection > 0 ? .green : .orange)
+        } else {
+          Text("🛑 已停止")
+            .font(.caption.bold())
+            .foregroundColor(.red)
+        }
+      }
+
+      // 控制按鈕
+      HStack(spacing: 16) {
+        // 向左移動 (後退)
+        Button(action: {
+          if !isWheelRotating {
+            movementDirection = -1
+            startWheelRotation()
+          } else {
+            movementDirection = -1
+          }
+        }) {
+          VStack(spacing: 4) {
+            Image(systemName: "arrow.left.circle.fill")
+              .font(.title2)
+            Text("向左移動")
+              .font(.caption2)
+          }
+          .foregroundColor(.white)
+          .frame(width: 100)
+          .padding(.vertical, 8)
+          .background(Color.orange.opacity(0.8))
+          .cornerRadius(8)
+        }
+        .buttonStyle(.plain)
+
+        // 停止
+        Button(action: {
+          if isWheelRotating {
+            stopWheelRotation()
+          }
+        }) {
+          VStack(spacing: 4) {
+            Image(systemName: "stop.circle.fill")
+              .font(.title2)
+            Text("停止")
+              .font(.caption2)
+          }
+          .foregroundColor(.white)
+          .frame(width: 80)
+          .padding(.vertical, 8)
+          .background(Color.red.opacity(0.8))
+          .cornerRadius(8)
+        }
+        .buttonStyle(.plain)
+        .disabled(!isWheelRotating)
+        .opacity(isWheelRotating ? 1.0 : 0.5)
+
+        // 向右移動 (前進)
+        Button(action: {
+          if !isWheelRotating {
+            movementDirection = 1
+            startWheelRotation()
+          } else {
+            movementDirection = 1
+          }
+        }) {
+          VStack(spacing: 4) {
+            Image(systemName: "arrow.right.circle.fill")
+              .font(.title2)
+            Text("向右移動")
+              .font(.caption2)
+          }
+          .foregroundColor(.white)
+          .frame(width: 100)
+          .padding(.vertical, 8)
+          .background(Color.green.opacity(0.8))
+          .cornerRadius(8)
+        }
+        .buttonStyle(.plain)
+      }
+
+      // 速度和範圍資訊
+      HStack(spacing: 12) {
+        Text("速度: \(String(format: "%.1f", wheelRotationSpeed)) rad/s")
+          .font(.caption2)
+          .foregroundColor(.white.opacity(0.7))
+        Text("範圍: ±\(String(format: "%.1f", movementRange))m")
+          .font(.caption2)
+          .foregroundColor(.white.opacity(0.7))
+      }
+    }
+  }
+
+  // MARK: - Base Telescope Control View
+  @ViewBuilder
+  private func baseTelescopeControlView() -> some View {
+    VStack(spacing: 10) {
+      // 當前角度顯示
+      HStack(spacing: 16) {
+        Text("左右: \(String(format: "%.0f°", baseTelescopeRotation * 180 / .pi))")
+          .font(.caption)
+          .foregroundColor(.white.opacity(0.8))
+        Text("上下: \(String(format: "%.0f°", baseTelescopeRotationX * 180 / .pi))")
+          .font(.caption)
+          .foregroundColor(.white.opacity(0.8))
+      }
+
+      // 左右旋轉控制
+      VStack(spacing: 6) {
+        Text("左右旋轉 (Yaw)")
+          .font(.caption2)
+          .foregroundColor(.white.opacity(0.7))
+
+        HStack(spacing: 12) {
+          Button(action: {
+            rotateBaseTelescope(by: -.pi / 12, axis: .y)
+          }) {
+            HStack(spacing: 4) {
+              Image(systemName: "arrow.left")
+              Text("15°")
+                .font(.caption2)
+            }
+            .foregroundColor(.white)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(Color.blue.opacity(0.8))
+            .cornerRadius(6)
+          }
+          .buttonStyle(.plain)
+
+          Button(action: {
+            rotateBaseTelescope(by: -.pi / 36, axis: .y)
+          }) {
+            HStack(spacing: 4) {
+              Image(systemName: "arrow.left")
+              Text("5°")
+                .font(.caption2)
+            }
+            .foregroundColor(.white)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Color.blue.opacity(0.6))
+            .cornerRadius(6)
+          }
+          .buttonStyle(.plain)
+
+          Button(action: {
+            resetBaseTelescopeRotation()
+          }) {
+            Image(systemName: "arrow.counterclockwise")
+              .font(.caption)
+              .foregroundColor(.white)
+              .padding(6)
+              .background(Color.orange.opacity(0.8))
+              .cornerRadius(6)
+          }
+          .buttonStyle(.plain)
+
+          Button(action: {
+            rotateBaseTelescope(by: .pi / 36, axis: .y)
+          }) {
+            HStack(spacing: 4) {
+              Text("5°")
+                .font(.caption2)
+              Image(systemName: "arrow.right")
+            }
+            .foregroundColor(.white)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Color.blue.opacity(0.6))
+            .cornerRadius(6)
+          }
+          .buttonStyle(.plain)
+
+          Button(action: {
+            rotateBaseTelescope(by: .pi / 12, axis: .y)
+          }) {
+            HStack(spacing: 4) {
+              Text("15°")
+                .font(.caption2)
+              Image(systemName: "arrow.right")
+            }
+            .foregroundColor(.white)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(Color.blue.opacity(0.8))
+            .cornerRadius(6)
+          }
+          .buttonStyle(.plain)
+        }
+      }
+
+      Divider()
+        .background(Color.white.opacity(0.3))
+
+      // 上下抬頭控制
+      VStack(spacing: 6) {
+        Text("上下抬頭 (Pitch)")
+          .font(.caption2)
+          .foregroundColor(.white.opacity(0.7))
+
+        HStack(spacing: 12) {
+          Button(action: {
+            rotateBaseTelescope(by: .pi / 12, axis: .x)
+          }) {
+            HStack(spacing: 4) {
+              Image(systemName: "arrow.down")
+              Text("15°")
+                .font(.caption2)
+            }
+            .foregroundColor(.white)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(Color.purple.opacity(0.8))
+            .cornerRadius(6)
+          }
+          .buttonStyle(.plain)
+
+          Button(action: {
+            rotateBaseTelescope(by: .pi / 36, axis: .x)
+          }) {
+            HStack(spacing: 4) {
+              Image(systemName: "arrow.down")
+              Text("5°")
+                .font(.caption2)
+            }
+            .foregroundColor(.white)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Color.purple.opacity(0.6))
+            .cornerRadius(6)
+          }
+          .buttonStyle(.plain)
+
+          Spacer()
+            .frame(width: 40)
+
+          Button(action: {
+            rotateBaseTelescope(by: -.pi / 36, axis: .x)
+          }) {
+            HStack(spacing: 4) {
+              Image(systemName: "arrow.up")
+              Text("5°")
+                .font(.caption2)
+            }
+            .foregroundColor(.white)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Color.purple.opacity(0.6))
+            .cornerRadius(6)
+          }
+          .buttonStyle(.plain)
+
+          Button(action: {
+            rotateBaseTelescope(by: -.pi / 12, axis: .x)
+          }) {
+            HStack(spacing: 4) {
+              Image(systemName: "arrow.up")
+              Text("15°")
+                .font(.caption2)
+            }
+            .foregroundColor(.white)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(Color.purple.opacity(0.8))
+            .cornerRadius(6)
+          }
+          .buttonStyle(.plain)
+        }
+      }
+    }
+  }
+
+  // MARK: - Fly Telescope Control View
+  @ViewBuilder
+  private func flyTelescopeControlView() -> some View {
+    VStack(spacing: 10) {
+      // 綁定狀態顯示
+      HStack {
+        Text("綁定狀態:")
+          .font(.caption)
+          .foregroundColor(.white.opacity(0.8))
+        Text(isFlyBoundToBase ? "已綁定到 base_telescope" : "未綁定")
+          .font(.caption.bold())
+          .foregroundColor(isFlyBoundToBase ? .green : .secondary)
+      }
+
+      // 綁定/解綁按鈕
+      if isFlyBoundToBase {
+        Button(action: {
+          unbindFlyTelescopeFromBase()
+        }) {
+          HStack(spacing: 8) {
+            Image(systemName: "link.badge.minus")
+              .font(.body)
+            Text("解除綁定")
+              .font(.subheadline)
+          }
+          .foregroundColor(.white)
+          .frame(maxWidth: .infinity)
+          .padding(.vertical, 10)
+          .background(Color.red.opacity(0.8))
+          .cornerRadius(8)
+        }
+        .buttonStyle(.plain)
+      } else {
+        Button(action: {
+          bindFlyTelescopeToBase()
+        }) {
+          HStack(spacing: 8) {
+            Image(systemName: "link")
+              .font(.body)
+            Text("綁定到 base_telescope")
+              .font(.subheadline)
+          }
+          .foregroundColor(.white)
+          .frame(maxWidth: .infinity)
+          .padding(.vertical, 10)
+          .background(Color.green.opacity(0.8))
+          .cornerRadius(8)
+        }
+        .buttonStyle(.plain)
+      }
+
+      // 說明文字
+      Text(isFlyBoundToBase ? "旋轉 base 會帶動 fly 一起旋轉" : "綁定後，fly 將跟隨 base 旋轉")
+        .font(.caption2)
+        .foregroundColor(.white.opacity(0.6))
+        .multilineTextAlignment(.center)
+    }
+  }
+
+  // MARK: - Generic Control View
+  @ViewBuilder
+  private func genericControlView(for entity: Entity) -> some View {
+    VStack(spacing: 10) {
+      // 實體資訊
+      VStack(alignment: .leading, spacing: 4) {
+        if let coordinates = tapCoordinates {
+          HStack {
+            Text("座標:")
+              .font(.caption2)
+              .foregroundColor(.white.opacity(0.7))
+            Text(String(format: "(%.2f, %.2f, %.2f)", coordinates.x, coordinates.y, coordinates.z))
+              .font(.caption2)
+              .foregroundColor(.white)
+          }
+        }
+
+        HStack {
+          Text("子物件:")
+            .font(.caption2)
+            .foregroundColor(.white.opacity(0.7))
+          Text("\(entity.children.count) 個")
+            .font(.caption2)
+            .foregroundColor(.white)
+        }
+      }
+
+      // 通用控制按鈕
+      Button(action: {
+        focusOnEntity(entity, duration: 0.5)
+      }) {
+        HStack(spacing: 8) {
+          Image(systemName: "scope")
+            .font(.body)
+          Text("聚焦到此實體")
+            .font(.subheadline)
+        }
+        .foregroundColor(.white)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 10)
+        .background(Color.blue.opacity(0.8))
+        .cornerRadius(8)
+      }
+      .buttonStyle(.plain)
     }
   }
 }
