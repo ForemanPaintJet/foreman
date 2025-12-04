@@ -24,7 +24,9 @@ struct TestRealityKit: View {
   @State private var baseTelescope: Entity?
   @State private var baseTelescopeRotation: Float = 0.0  // Yaw (左右旋轉)
   @State private var baseTelescopeRotationX: Float = 0.0  // Pitch (上下抬頭)
-  
+  @State private var baseTelescopeRotationZ: Float = 0.0  // Roll (左右傾斜)
+  @State private var baseTelescopeAxisLines: Entity?
+
   // fly_telescope 控制
   @State private var flyTelescope: Entity?
   @State private var originalFlyTelescopeParent: Entity?
@@ -537,12 +539,12 @@ struct TestRealityKit: View {
     sceneryRoot.name = "SceneryContainer"
     print("  創建佈景容器：\(sceneryRoot.name)")
 
-    // 創建地面網格
-    print("  開始創建地面網格...")
-    let grid = createGridFloor()
-    sceneryRoot.addChild(grid)
-    gridEntity = grid
-    print("  地面網格已添加，子實體數：\(grid.children.count)")
+//    // 創建地面網格
+//    print("  開始創建地面網格...")
+//    let grid = createGridFloor()
+//    sceneryRoot.addChild(grid)
+//    gridEntity = grid
+//    print("  地面網格已添加，子實體數：\(grid.children.count)")
 
     // 創建參照柱子
     print("  開始創建參照柱子...")
@@ -1106,6 +1108,7 @@ struct TestRealityKit: View {
   enum RotationAxis {
     case x  // Pitch (上下抬頭)
     case y  // Yaw (左右旋轉)
+    case z  // Roll (左右傾斜)
   }
   
   // 旋轉 base_telescope
@@ -1121,18 +1124,27 @@ struct TestRealityKit: View {
       // 限制 pitch 在 -60° 到 +60° 之間，避免翻轉
       baseTelescopeRotationX = max(-Float.pi / 3, min(Float.pi / 3, newRotationX))
       print("🔄 base_telescope pitch (上下): \(String(format: "%.0f°", baseTelescopeRotationX * 180 / .pi))")
-      
+
     case .y:
       baseTelescopeRotation += angle
       print("🔄 base_telescope yaw (左右): \(String(format: "%.0f°", baseTelescopeRotation * 180 / .pi))")
+
+    case .z:
+      let newRotationZ = baseTelescopeRotationZ + angle
+      // 限制 roll 在 -60° 到 +60° 之間
+      baseTelescopeRotationZ = newRotationZ
+      print("🔄 base_telescope roll (左右傾斜): \(String(format: "%.0f°", baseTelescopeRotationZ * 180 / .pi))")
     }
     
-    // 組合 X 和 Y 軸旋轉
+    // 組合 X、Y 和 Z 軸旋轉
     let rotationQuatX = simd_quatf(angle: baseTelescopeRotationX, axis: [1, 0, 0])
     let rotationQuatY = simd_quatf(angle: baseTelescopeRotation, axis: [0, 1, 0])
-    
-    // 先應用 Y 軸旋轉（yaw），再應用 X 軸旋轉（pitch）
-    telescope.orientation = rotationQuatY * rotationQuatX
+    let rotationQuatZ = simd_quatf(angle: baseTelescopeRotationZ, axis: [0, 0, 1])
+
+    // 應用旋轉順序: Y (yaw) -> X (pitch) -> Z (roll)
+    let quatf = rotationQuatY * rotationQuatX * rotationQuatZ
+    telescope.orientation = rotationQuatY * rotationQuatX * rotationQuatZ
+//    telescope.setOrientation(quatf, relativeTo: nil)
   }
   
   // 重置 base_telescope 旋轉
@@ -1141,11 +1153,12 @@ struct TestRealityKit: View {
       print("❌ base_telescope 未找到")
       return
     }
-    
+
     baseTelescopeRotation = 0.0
     baseTelescopeRotationX = 0.0
+    baseTelescopeRotationZ = 0.0
     telescope.orientation = simd_quatf(angle: 0, axis: [0, 1, 0])
-    print("🔄 base_telescope 已重置旋轉（X 和 Y 軸）")
+    print("🔄 base_telescope 已重置旋轉（X、Y 和 Z 軸）")
   }
   
   // 綁定 fly_telescope 到 base_telescope
@@ -1347,10 +1360,8 @@ struct TestRealityKit: View {
     axisContainer.addChild(yAxis)
     axisContainer.addChild(zAxis)
 
-    // 放在左上角，不干擾主模型（不受 group.scale 影響）
     axisContainer.position = SIMD3<Float>(0, 0, 0)
 
-    print("✅ 已創建 3D 軸線（左上角）：")
     print("   🔴 X 軸（紅色）- 向右")
     print("   🟢 Y 軸（綠色）- 向上")
     print("   🔵 Z 軸（藍色）- 向前")
@@ -1358,7 +1369,56 @@ struct TestRealityKit: View {
 
     return axisContainer
   }
-  
+
+  private func createLocalAxisLines(compensatingScale: Float) -> Entity {
+    let axisLength: Float = 0.2
+    let axisThickness: Float = 0.005
+
+    // X 軸（紅色）
+    let xAxisMesh = MeshResource.generateBox(size: SIMD3<Float>(axisLength, axisThickness, axisThickness))
+    var xAxisMaterial = SimpleMaterial()
+    xAxisMaterial.color = .init(tint: .red, texture: nil)
+    xAxisMaterial.metallic = 0.0
+    xAxisMaterial.roughness = 1.0
+    let xAxis = ModelEntity(mesh: xAxisMesh, materials: [xAxisMaterial])
+    xAxis.name = "X軸"
+    xAxis.position = SIMD3<Float>(axisLength / 2, 0, 0)
+
+    // Y 軸（綠色）
+    let yAxisMesh = MeshResource.generateBox(size: SIMD3<Float>(axisThickness, axisLength, axisThickness))
+    var yAxisMaterial = SimpleMaterial()
+    yAxisMaterial.color = .init(tint: .green, texture: nil)
+    yAxisMaterial.metallic = 0.0
+    yAxisMaterial.roughness = 1.0
+    let yAxis = ModelEntity(mesh: yAxisMesh, materials: [yAxisMaterial])
+    yAxis.name = "Y軸"
+    yAxis.position = SIMD3<Float>(0, axisLength / 2, 0)
+
+    // Z 軸（藍色）
+    let zAxisMesh = MeshResource.generateBox(size: SIMD3<Float>(axisThickness, axisThickness, axisLength))
+    var zAxisMaterial = SimpleMaterial()
+    zAxisMaterial.color = .init(tint: .blue, texture: nil)
+    zAxisMaterial.metallic = 0.0
+    zAxisMaterial.roughness = 1.0
+    let zAxis = ModelEntity(mesh: zAxisMesh, materials: [zAxisMaterial])
+    zAxis.name = "Z軸"
+    zAxis.position = SIMD3<Float>(0, 0, axisLength / 2)
+
+    // 創建容器來放置軸線
+    let axisContainer = Entity()
+    axisContainer.name = "BaseTelescopeAxisLines"
+    axisContainer.addChild(xAxis)
+    axisContainer.addChild(yAxis)
+    axisContainer.addChild(zAxis)
+
+    axisContainer.position = SIMD3<Float>(0, 0, 0)
+
+    // 應用補償縮放以對抗繼承的 normalizedScale
+    axisContainer.scale = SIMD3<Float>(repeating: compensatingScale)
+
+    return axisContainer
+  }
+
   private func configureInputTarget(_ entity: Entity) {
     // 為所有有 CollisionComponent 的實體添加 InputTargetComponent
     if entity.components.has(CollisionComponent.self) {
@@ -2118,6 +2178,14 @@ struct TestRealityKit: View {
               print("   ID: \(telescope.id)")
               print("   座標: \(telescope.position)")
               print("   子物件數量: \(telescope.children.count)")
+
+              // 創建並添加局部座標軸
+              let baseTelescopeAxes = createLocalAxisLines(compensatingScale: 1.0 / normalizedScale)
+              telescope.addChild(baseTelescopeAxes)
+              baseTelescopeAxisLines = baseTelescopeAxes
+              print("✅ 已為 base_telescope 添加座標軸")
+              print("   補償縮放係數: \(1.0 / normalizedScale)")
+              print("   座標軸容器縮放: \(baseTelescopeAxes.scale)")
             } else {
               print("❌ 未找到 base_telescope")
             }
@@ -2831,8 +2899,12 @@ struct TestRealityKit: View {
                     Text("左右 (Yaw): \(String(format: "%.0f°", baseTelescopeRotation * 180 / .pi))")
                       .font(.caption)
                       .foregroundColor(.secondary)
-                    
+
                     Text("上下 (Pitch): \(String(format: "%.0f°", baseTelescopeRotationX * 180 / .pi))")
+                      .font(.caption)
+                      .foregroundColor(.secondary)
+
+                    Text("傾斜 (Roll): \(String(format: "%.0f°", baseTelescopeRotationZ * 180 / .pi))")
                       .font(.caption)
                       .foregroundColor(.secondary)
                   }
@@ -2913,7 +2985,43 @@ struct TestRealityKit: View {
                     .font(.caption)
                   }
                 }
-                
+
+                // Z 軸控制 - 左右傾斜
+                VStack(spacing: 8) {
+                  Text("左右傾斜 (Roll)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+
+                  HStack(spacing: 20) {
+                    Button("◀︎ 左傾 15°") {
+                      rotateBaseTelescope(by: -.pi / 12, axis: .z)
+                    }
+                    .buttonStyle(.bordered)
+                    .font(.caption)
+
+                    Button("左傾 5°") {
+                      rotateBaseTelescope(by: -.pi / 36, axis: .z)
+                    }
+                    .buttonStyle(.bordered)
+                    .font(.caption2)
+
+                    Spacer()
+                      .frame(width: 60)
+
+                    Button("右傾 5°") {
+                      rotateBaseTelescope(by: .pi / 36, axis: .z)
+                    }
+                    .buttonStyle(.bordered)
+                    .font(.caption2)
+
+                    Button("右傾 15° ▶︎") {
+                      rotateBaseTelescope(by: .pi / 12, axis: .z)
+                    }
+                    .buttonStyle(.bordered)
+                    .font(.caption)
+                  }
+                }
+
                 // fly_telescope 綁定控制（只在找到 fly_telescope 時顯示）
                 if flyTelescope != nil {
                   Divider()
@@ -3436,11 +3544,14 @@ struct TestRealityKit: View {
         Text("上下: \(String(format: "%.0f°", baseTelescopeRotationX * 180 / .pi))")
           .font(.caption)
           .foregroundColor(.white.opacity(0.8))
+        Text("傾斜: \(String(format: "%.0f°", baseTelescopeRotationZ * 180 / .pi))")
+          .font(.caption)
+          .foregroundColor(.white.opacity(0.8))
       }
 
       // 左右旋轉控制
       VStack(spacing: 6) {
-        Text("左右旋轉 (Yaw)")
+        Text("左右旋轉 (Yaw) 隨著 y 軸")
           .font(.caption2)
           .foregroundColor(.white.opacity(0.7))
 
@@ -3528,7 +3639,7 @@ struct TestRealityKit: View {
 
       // 上下抬頭控制
       VStack(spacing: 6) {
-        Text("上下抬頭 (Pitch)")
+        Text("上下抬頭 (Pitch) 隨著 x 軸")
           .font(.caption2)
           .foregroundColor(.white.opacity(0.7))
 
@@ -3596,6 +3707,85 @@ struct TestRealityKit: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
             .background(Color.purple.opacity(0.8))
+            .cornerRadius(6)
+          }
+          .buttonStyle(.plain)
+        }
+      }
+
+      Divider()
+        .background(Color.white.opacity(0.3))
+
+      // 左右傾斜控制
+      VStack(spacing: 6) {
+        Text("左右傾斜 (Roll) 隨著 z 軸")
+          .font(.caption2)
+          .foregroundColor(.white.opacity(0.7))
+
+        HStack(spacing: 12) {
+          Button(action: {
+            rotateBaseTelescope(by: -.pi / 12, axis: .z)
+          }) {
+            HStack(spacing: 4) {
+              Image(systemName: "arrow.left")
+              Text("15°")
+                .font(.caption2)
+            }
+            .foregroundColor(.white)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(Color.green.opacity(0.8))
+            .cornerRadius(6)
+          }
+          .buttonStyle(.plain)
+
+          Button(action: {
+            rotateBaseTelescope(by: -.pi / 36, axis: .z)
+          }) {
+            HStack(spacing: 4) {
+              Image(systemName: "arrow.left")
+              Text("5°")
+                .font(.caption2)
+            }
+            .foregroundColor(.white)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Color.green.opacity(0.6))
+            .cornerRadius(6)
+          }
+          .buttonStyle(.plain)
+
+          Spacer()
+            .frame(width: 40)
+
+          Button(action: {
+            rotateBaseTelescope(by: .pi / 36, axis: .z)
+          }) {
+            HStack(spacing: 4) {
+              Image(systemName: "arrow.right")
+              Text("5°")
+                .font(.caption2)
+            }
+            .foregroundColor(.white)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Color.green.opacity(0.6))
+            .cornerRadius(6)
+          }
+          .buttonStyle(.plain)
+
+          Button(action: {
+            rotateBaseTelescope(by: .pi / 12, axis: .z)
+          }) {
+            HStack(spacing: 4) {
+              Image(systemName: "arrow.right")
+              Text("15°")
+                .font(.caption2)
+            }
+            .foregroundColor(.white)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(Color.green.opacity(0.8))
             .cornerRadius(6)
           }
           .buttonStyle(.plain)
